@@ -1,0 +1,46 @@
+# 工单数据分析系统配置
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  output_dir: output
+
+# 异常检测配置
+anomaly_detection:
+  contamination: 0.05          # Isolation Forest 异常比例
+  n_estimators: 200            # 树的数量
+  ensemble_models:             # 集成模型列表
+    - isolation_forest
+    - lof                      # Local Outlier Factor
+  anomaly_threshold: 0.6       # 综合异常分数阈值
+  top_n_features: 10           # 异常原因分析取前N个特征
+
+# 风险评分配置
+risk_scoring:
+  weights:                     # 5维度权重
+    compliance: 0.25           # 合规
+    sla: 0.25                  # SLA
+    cost: 0.20                 # 成本
+    quality: 0.15              # 质量
+    equipment: 0.15            # 设备
+  risk_levels:                 # 风险等级划分
+    high: 0.7
+    medium: 0.4
+    low: 0.0
+  lr_c: 1.0                    # 逻辑回归正则化
+  lr_max_iter: 1000
+
+# 库存预测配置
+inventory_forecast:
+  forecast_days: 30            # 预测天数
+  confidence_interval: 0.95    # 置信区间
+  safety_stock_factor: 1.65    # 安全库存系数（95%服务水平）
+  reorder_point_factor: 1.2    # 再订货点系数
+  prophet_params:
+    changepoint_prior_scale: 0.05
+    seasonality_prior_scale: 10.0
+  lgbm_params:
+    n_estimators: 300
+    learning_rate: 0.05
+    max_depth: 6
+    num_leaves: 31
+  arima_order: [1, 1, 1]       # ARIMA(p,d,q)
