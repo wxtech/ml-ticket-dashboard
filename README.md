@@ -52,11 +52,12 @@ pip install -r requirements.txt
 # 2. 生成合成数据
 python scripts/generate_data.py
 
-# 3. 运行全部分析
+# 3. 运行全部分析 + 生成仪表盘
 python scripts/run_all.py
 
-# 4. 生成可视化图表
-python scripts/visualize.py
+# 4. 浏览器打开仪表盘
+open output/dashboard.html        # macOS
+xdg-open output/dashboard.html   # Linux
 ```
 
 也可以单独运行某个模块：
@@ -288,6 +289,15 @@ inventory_forecast:
 | `05_inventory_forecast.png` | 2个典型物料的30天预测趋势+置信区间 |
 | `06_inventory_plan.png` | 库存vs再订货点vs安全库存 + 可售天数(90天警戒线) |
 | `07_correlation.png` | 异常分数vs风险分数相关性散点图 |
+
+### 交互式仪表盘
+
+`output/dashboard.html` — 自包含的交互式HTML仪表盘，浏览器直接打开即可查看：
+
+- **总览页**: 关键指标卡片 + 异常分数分布 + 风险等级饼图 + 区域对比 + 工单类型异常率
+- **异常检测页**: 分数分布 + 故障/类型/优先级异常率 + PCA降维散点图 + 异常工单Top50表格
+- **风险评分页**: 分数分布 + 风险等级饼图 + 5维雷达图 + 区域/类型风险分 + LR风险因子 + 高风险工单Top10表格
+- **关联分析页**: 异常分数 vs 风险分数散点图
 
 ## 技术栈
 

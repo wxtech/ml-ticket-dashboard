@@ -25,8 +25,13 @@ def main():
     print("\n[3/3] 库存预测")
     run_forecast(config)
 
+    print("\n[4/4] 生成仪表盘")
+    from dashboard import main as run_dashboard
+    run_dashboard()
+
     print("\n" + "=" * 60)
     print("  全部分析完成! 结果保存在 output/ 目录")
+    print("  仪表盘: output/dashboard.html (浏览器打开)")
     print("=" * 60)
 
 
