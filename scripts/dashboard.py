@@ -11,7 +11,9 @@ def load_results():
     risk = pd.read_csv(base / "risk_scoring_results.csv")
     pca = pd.read_csv(base / "anomaly_pca_visualization.csv")
     importance = pd.read_csv(base / "risk_feature_importance.csv")
-    return anomaly, risk, pca, importance
+    forecast = pd.read_csv(base / "inventory_forecast_results.csv")
+    plan = pd.read_csv(base / "inventory_plan_results.csv")
+    return anomaly, risk, pca, importance, forecast, plan
 
 
 def build_anomaly_stats(anomaly):
@@ -132,6 +134,52 @@ def build_correlation_data(anomaly, risk):
     }
 
 
+def build_inventory_stats(forecast, plan):
+    combos = forecast.groupby(["material_id", "site_id"]).size().reset_index()
+    n_combos = len(combos)
+    total_forecast = round(float(forecast["forecast"].sum()), 1)
+    avg_daily = round(float(forecast["forecast"].mean()), 2)
+    need_reorder = int(plan["need_reorder"].sum())
+
+    by_material = plan.groupby("material_id").agg(
+        sites=("site_id", "count"),
+        avg_stock=("current_stock", "mean"),
+        avg_demand=("avg_daily_demand", "mean"),
+        total_forecast=("forecast_total", "sum"),
+    ).reset_index()
+    by_material["avg_stock"] = by_material["avg_stock"].round(0).astype(int)
+    by_material["avg_demand"] = by_material["avg_demand"].round(1)
+    by_material["total_forecast"] = by_material["total_forecast"].round(0).astype(int)
+
+    # 预测趋势数据：取前4个物料-站点组合
+    combos_list = forecast.groupby(["material_id", "site_id"]).size().reset_index().head(4)
+    forecast_trends = []
+    for _, row in combos_list.iterrows():
+        sub = forecast[(forecast["material_id"] == row["material_id"]) & (forecast["site_id"] == row["site_id"])].copy()
+        sub["date"] = sub["date"].astype(str)
+        forecast_trends.append({
+            "material_id": row["material_id"],
+            "site_id": row["site_id"],
+            "dates": sub["date"].tolist(),
+            "forecast": sub["forecast"].round(2).tolist(),
+            "lower": sub["lower"].round(2).tolist(),
+            "upper": sub["upper"].round(2).tolist(),
+        })
+
+    return {
+        "n_combos": n_combos,
+        "total_forecast": total_forecast,
+        "avg_daily": avg_daily,
+        "need_reorder": need_reorder,
+        "safe_count": n_combos - need_reorder,
+        "by_material": by_material.to_dict("records"),
+        "forecast_trends": forecast_trends,
+        "plan_table": plan[["material_id", "site_id", "current_stock", "avg_daily_demand",
+                            "safety_stock", "reorder_point", "days_until_stockout",
+                            "need_reorder", "forecast_total"]].to_dict("records"),
+    }
+
+
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -194,6 +242,7 @@ table.dataTable tbody td { font-size: 13px; }
   <div class="tab active" onclick="switchTab('overview')">总览</div>
   <div class="tab" onclick="switchTab('anomaly')">异常检测</div>
   <div class="tab" onclick="switchTab('risk')">风险评分</div>
+  <div class="tab" onclick="switchTab('inventory')">库存预测</div>
   <div class="tab" onclick="switchTab('correlation')">关联分析</div>
 </div>
 <div class="content">
@@ -248,6 +297,21 @@ table.dataTable tbody td { font-size: 13px; }
       <table id="risk-table" class="display" style="width:100%"></table>
     </div>
   </div>
+  <!-- 库存预测 -->
+  <div class="page" id="page-inventory">
+    <div class="cards" id="inventory-cards"></div>
+    <div class="chart-row">
+      <div class="chart-box"><h3>预测需求趋势 (Top4 物料)</h3><canvas id="inv-trend"></canvas></div>
+      <div class="chart-box"><h3>各物料库存状态</h3><canvas id="inv-stock-bar"></canvas></div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-box chart-full"><h3>当前库存 vs 再订货点 vs 安全库存</h3><canvas id="inv-compare"></canvas></div>
+    </div>
+    <div class="table-box">
+      <h3>库存计划明细</h3>
+      <table id="inventory-table" class="display" style="width:100%"></table>
+    </div>
+  </div>
   <!-- 关联分析 -->
   <div class="page" id="page-correlation">
     <div class="chart-row">
@@ -271,7 +335,7 @@ function makeCard(label, value, sub, cls) {
 }
 
 function init() {
-  const A = DATA.anomaly, R = DATA.risk;
+  const A = DATA.anomaly, R = DATA.risk, I = DATA.inventory;
   // Overview cards
   document.getElementById('overview-cards').innerHTML =
     makeCard('工单总数', A.total.toLocaleString(), '分析样本量', 'card-info') +
@@ -294,6 +358,14 @@ function init() {
     makeCard('中风险', R.medium, R.medium_rate + '%', 'card-warning') +
     makeCard('低风险', R.low, '', 'card-success') +
     makeCard('平均风险分', R.avg_score, '融合概率 ' + R.avg_final, 'card-info');
+
+  // Inventory cards
+  document.getElementById('inventory-cards').innerHTML =
+    makeCard('预测物料-站点', I.n_combos, '组合数', 'card-info') +
+    makeCard('总预测需求', I.total_forecast.toLocaleString(), '30天累计', 'card-info') +
+    makeCard('日均需求', I.avg_daily, '所有组合平均', 'card-info') +
+    makeCard('库存充足', I.safe_count, '个物料-站点', 'card-success') +
+    makeCard('需补货', I.need_reorder, '个物料-站点', I.need_reorder > 0 ? 'card-danger' : 'card-success');
 
   // Charts
   renderCharts();
@@ -417,6 +489,50 @@ function renderCharts() {
     },
     options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { x: { title: { display: true, text: '异常分数' } }, y: { title: { display: true, text: '风险分数' } } } }
   });
+
+  // Inventory: forecast trend (top 4 combos)
+  const trends = DATA.inventory.forecast_trends;
+  const trendColors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12'];
+  const trendDatasets = trends.map((t, i) => ({
+    label: t.material_id + ' @ ' + t.site_id,
+    data: t.forecast,
+    borderColor: trendColors[i],
+    backgroundColor: trendColors[i] + '20',
+    fill: false,
+    tension: 0.3,
+    pointRadius: 1,
+  }));
+  new Chart(document.getElementById('inv-trend'), {
+    type: 'line', data: { labels: trends[0].dates.map(d => d.slice(5)), datasets: trendDatasets },
+    options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true, title: { display: true, text: '日需求量' } } } }
+  });
+
+  // Inventory: stock by material
+  const bm = DATA.inventory.by_material;
+  new Chart(document.getElementById('inv-stock-bar'), {
+    type: 'bar', data: {
+      labels: bm.map(d => d.material_id),
+      datasets: [
+        { label: '平均库存', data: bm.map(d => d.avg_stock), backgroundColor: '#3498db', borderRadius: 4 },
+        { label: '30天预测总量', data: bm.map(d => d.total_forecast), backgroundColor: '#2ecc71', borderRadius: 4 },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // Inventory: current vs reorder vs safety
+  const pt = DATA.inventory.plan_table;
+  new Chart(document.getElementById('inv-compare'), {
+    type: 'bar', data: {
+      labels: pt.map(d => d.material_id.slice(-4) + '@' + d.site_id.slice(-4)),
+      datasets: [
+        { label: '当前库存', data: pt.map(d => d.current_stock), backgroundColor: '#3498db' },
+        { label: '再订货点', data: pt.map(d => d.reorder_point), backgroundColor: '#f39c12' },
+        { label: '安全库存', data: pt.map(d => d.safety_stock), backgroundColor: '#e74c3c' },
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
+  });
 }
 
 function renderTables() {
@@ -450,6 +566,24 @@ function renderTables() {
     ],
     language: { search: '搜索:', lengthMenu: '每页 _MENU_ 条', info: '第 _START_ - _END_ 共 _TOTAL_ 条', paginate: { previous: '上一页', next: '下一页' } }
   });
+
+  // Inventory table
+  const I = DATA.inventory.plan_table;
+  $('#inventory-table').DataTable({
+    data: I, pageLength: 10, order: [[7, 'asc']],
+    columns: [
+      { data: 'material_id', title: '物料编号' },
+      { data: 'site_id', title: '站点' },
+      { data: 'current_stock', title: '当前库存', render: d => d.toLocaleString() },
+      { data: 'avg_daily_demand', title: '日均需求', render: d => d.toFixed(1) },
+      { data: 'safety_stock', title: '安全库存', render: d => d.toFixed(1) },
+      { data: 'reorder_point', title: '再订货点', render: d => d.toFixed(1) },
+      { data: 'days_until_stockout', title: '可售天数', render: d => '<span style="color:' + (d < 90 ? '#e74c3c' : d < 180 ? '#f39c12' : '#2ecc71') + '">' + d.toFixed(0) + '天</span>' },
+      { data: 'need_reorder', title: '需补货', render: d => d ? '<span class="badge badge-danger">需补货</span>' : '<span class="badge badge-success">充足</span>' },
+      { data: 'forecast_total', title: '30天预测总量', render: d => d.toFixed(0) },
+    ],
+    language: { search: '搜索:', lengthMenu: '每页 _MENU_ 条', info: '第 _START_ - _END_ 共 _TOTAL_ 条', paginate: { previous: '上一页', next: '下一页' } }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
@@ -460,7 +594,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 def main():
     print("加载分析结果...")
-    anomaly, risk, pca, importance = load_results()
+    anomaly, risk, pca, importance, forecast, plan = load_results()
 
     print("构建统计数据...")
     data = {
@@ -471,6 +605,7 @@ def main():
         "anomalyTable": build_anomaly_table_data(anomaly),
         "riskTable": build_risk_table_data(risk),
         "corr": build_correlation_data(anomaly, risk),
+        "inventory": build_inventory_stats(forecast, plan),
     }
 
     print("生成仪表盘HTML...")
