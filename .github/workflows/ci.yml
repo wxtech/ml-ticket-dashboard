@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate synthetic data
+        run: python scripts/generate_data.py
+
+      - name: Run anomaly detection
+        run: python src/anomaly_detection.py
+
+      - name: Run risk scoring
+        run: python src/risk_scoring.py
+
+      - name: Run inventory forecast
+        run: python src/inventory_forecast.py
+
+      - name: Generate dashboard
+        run: python scripts/dashboard.py
+
+      - name: Verify outputs
+        run: |
+          test -f output/anomaly_detection_results.csv
+          test -f output/risk_scoring_results.csv
+          test -f output/inventory_forecast_results.csv
+          test -f output/inventory_plan_results.csv
+          test -f output/dashboard.html
+          test -f index.html
+          echo "All output files verified."
+
+      - name: Verify data integrity
+        run: python -c "
+          import pandas as pd
+          a = pd.read_csv('output/anomaly_detection_results.csv')
+          r = pd.read_csv('output/risk_scoring_results.csv')
+          f = pd.read_csv('output/inventory_forecast_results.csv')
+          assert len(a) == 5000, f'anomaly rows: {len(a)}'
+          assert len(r) == 5000, f'risk rows: {len(r)}'
+          assert len(f) > 0, 'forecast empty'
+          assert 'anomaly_label' in a.columns
+          assert 'risk_score' in r.columns
+          assert 'forecast' in f.columns
+          print('Data integrity check passed.')
+          "
+
+      - name: Generate charts
+        run: python scripts/visualize.py
+
+      - name: Verify charts
+        run: |
+          test -f output/charts/01_anomaly_overview.png
+          test -f output/charts/03_risk_overview.png
+          test -f output/charts/05_inventory_forecast.png
+          echo "Charts verified."
