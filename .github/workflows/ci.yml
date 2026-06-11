@@ -48,7 +48,8 @@ jobs:
           echo "All output files verified."
 
       - name: Verify data integrity
-        run: python -c "
+        run: |
+          python3 << 'PYEOF'
           import pandas as pd
           a = pd.read_csv('output/anomaly_detection_results.csv')
           r = pd.read_csv('output/risk_scoring_results.csv')
@@ -60,7 +61,7 @@ jobs:
           assert 'risk_score' in r.columns
           assert 'forecast' in f.columns
           print('Data integrity check passed.')
-          "
+          PYEOF
 
       - name: Generate charts
         run: python scripts/visualize.py
