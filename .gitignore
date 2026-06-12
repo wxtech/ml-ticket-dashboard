@@ -1,4 +1,4 @@
 __pycache__/
 
-output/dashboard.html
-output/logs/api.log
+data/uploads/
+output/logs/
