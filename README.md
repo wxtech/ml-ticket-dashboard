@@ -17,26 +17,22 @@
 │   ├── anomaly_detection.py     # 异常检测模块
 │   ├── risk_scoring.py          # 风险评分模块
 │   ├── inventory_forecast.py    # 库存预测模块
+│   ├── api.py                   # REST API 服务
 │   └── utils.py                 # 共享工具函数
 ├── scripts/
 │   ├── generate_data.py         # 合成数据生成器
 │   ├── run_all.py               # 全量运行入口
-│   └── visualize.py             # 可视化图表生成
+│   ├── visualize.py             # 可视化图表生成
+│   ├── dashboard.py             # 交互式仪表盘生成
+│   └── test_api.py              # API 测试脚本
 ├── output/
+│   ├── dashboard.html           # 交互式仪表盘
 │   ├── anomaly_detection_results.csv
-│   ├── anomaly_pca_visualization.csv
 │   ├── risk_scoring_results.csv
-│   ├── risk_feature_importance.csv
 │   ├── inventory_forecast_results.csv
 │   ├── inventory_plan_results.csv
 │   └── charts/                  # 7张可视化图表
-│       ├── 01_anomaly_overview.png
-│       ├── 02_anomaly_scatter.png
-│       ├── 03_risk_overview.png
-│       ├── 04_risk_by_region.png
-│       ├── 05_inventory_forecast.png
-│       ├── 06_inventory_plan.png
-│       └── 07_correlation.png
+├── index.html                   # GitHub Pages 首页
 ├── requirements.txt
 └── README.md
 ```
@@ -70,20 +66,18 @@ python src/inventory_forecast.py  # 仅库存预测
 
 ## API 服务
 
-启动 API 服务后，可通过 HTTP 接口调用异常检测和风险评分。
-
 ```bash
 # 启动服务 (默认端口 8000)
 python src/api.py
 
-# 查看接口文档
+# 查看接口文档 (Swagger UI)
 open http://localhost:8000/docs
 
 # 运行测试脚本
 python scripts/test_api.py
 ```
 
-### API 端点
+### API 端点总览
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
@@ -91,7 +85,11 @@ python scripts/test_api.py
 | `/api/anomaly` | POST | 异常检测 |
 | `/api/risk` | POST | 风险评分 |
 | `/api/analyze` | POST | 综合分析（异常+风险） |
-| `/api/batch` | POST | 批量分析 |
+| `/api/batch` | POST | 批量工单分析 |
+| `/api/inventory/forecast` | POST | 库存需求预测 |
+| `/api/inventory/plan` | POST | 库存计划计算 |
+| `/api/inventory/batch-plan` | POST | 批量库存计划 |
+| `/api/inventory/materials` | GET | 物料列表 |
 
 ### 请求示例
 
@@ -151,6 +149,61 @@ curl -X POST http://localhost:8000/api/risk \
 }
 ```
 
+**库存需求预测**：
+
+```bash
+curl -X POST http://localhost:8000/api/inventory/forecast \
+  -H "Content-Type: application/json" \
+  -d '{"material_id": "MAT0020", "site_id": "SITE0001", "forecast_days": 30}'
+```
+
+**响应**：
+
+```json
+{
+  "material_id": "MAT0020",
+  "site_id": "SITE0001",
+  "history_days": 365,
+  "current_stock": 2689.0,
+  "avg_daily_demand": 9.63,
+  "forecast_total": 294.8,
+  "forecast": [
+    {"date": "2026-01-01", "forecast": 7.97, "lower": 5.78, "upper": 10.13}
+  ]
+}
+```
+
+**库存计划计算**：
+
+```bash
+curl -X POST http://localhost:8000/api/inventory/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "material_id": "MAT0020",
+    "site_id": "SITE0001",
+    "current_stock": 2689,
+    "avg_daily_demand": 9.63,
+    "std_daily_demand": 5.02,
+    "lead_time_days": 7,
+    "service_level": 0.95
+  }'
+```
+
+**响应**：
+
+```json
+{
+  "material_id": "MAT0020",
+  "site_id": "SITE0001",
+  "current_stock": 2689.0,
+  "safety_stock": 21.9,
+  "reorder_point": 89.3,
+  "days_until_stockout": 279.2,
+  "need_reorder": false,
+  "recommended_reorder_qty": 0
+}
+```
+
 ### 工单字段说明
 
 | 字段 | 类型 | 必填 | 说明 |
@@ -168,6 +221,19 @@ curl -X POST http://localhost:8000/api/risk \
 | `photo_count` | int | 否 | 照片数 |
 | `report_uploaded` | bool | 否 | 报告是否上传 |
 | `customer_signature` | bool | 否 | 客户是否签字 |
+
+### 库存字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `material_id` | string | 是 | 物料编号 |
+| `site_id` | string | 是 | 站点编号 |
+| `forecast_days` | int | 否 | 预测天数（默认30） |
+| `current_stock` | float | 是 | 当前库存（计划接口） |
+| `avg_daily_demand` | float | 是 | 日均需求（计划接口） |
+| `std_daily_demand` | float | 否 | 日需求标准差（默认5.0） |
+| `lead_time_days` | int | 否 | 补货周期天数（默认7） |
+| `service_level` | float | 否 | 服务水平（默认0.95） |
 
 ## 数据模型
 
@@ -206,7 +272,7 @@ curl -X POST http://localhost:8000/api/risk \
 | G-反馈 | `is_reopened` | bool | 是否重开 |
 | G-反馈 | `customer_complaint` | bool | 是否投诉 |
 | G-反馈 | `customer_satisfaction` | int 1-5 | 客户满意度 |
-| G-feedback | `qc_audit_result` | enum | 合规/不合规/待审 |
+| G-反馈 | `qc_audit_result` | enum | 合规/不合规/待审 |
 
 #### `ticket_materials` — 工单-物料明细
 
@@ -252,15 +318,6 @@ curl -X POST http://localhost:8000/api/risk \
 - `anomaly_detection_results.csv`: 每工单的异常标签、异常分数、子模型标记、异常原因
 - `anomaly_pca_visualization.csv`: PCA降维后的2D投影数据
 
-**关键参数** (`config.yaml`):
-```yaml
-anomaly_detection:
-  contamination: 0.05    # 异常比例
-  n_estimators: 200      # 树数量
-  anomaly_threshold: 0.6 # 综合异常分数阈值
-  top_n_features: 10     # 异常原因取前N特征
-```
-
 ### 2. 风险评分 (`src/risk_scoring.py`)
 
 **目标**: 多维度量化风险，可解释的风险概率
@@ -284,11 +341,6 @@ anomaly_detection:
 ```
 final_risk_prob = 0.3 × rule_score + 0.35 × lr_prob + 0.35 × nn_prob
 ```
-
-**风险等级**:
-- 高风险: score ≥ 0.7
-- 中风险: 0.4 ≤ score < 0.7
-- 低风险: score < 0.4
 
 **输出**:
 - `risk_scoring_results.csv`: 每工单的规则分数、LR概率、NN概率、融合概率、5维度明细、风险解释
@@ -319,52 +371,9 @@ final_risk_prob = 0.3 × rule_score + 0.35 × lr_prob + 0.35 × nn_prob
 再订货点 = 日均需求 × LT + 安全库存
 ```
 
-**预测范围**: 选择消耗量Top10的物料，每物料最多5个站点，30天预测
-
 **输出**:
 - `inventory_forecast_results.csv`: 每日每物料-站点的需求预测、置信区间
 - `inventory_plan_results.csv`: 当前库存、安全库存、再订货点、可售天数、是否需补货
-
-## 配置说明
-
-所有参数集中在 `config/config.yaml`:
-
-```yaml
-# 数据路径
-data:
-  raw_dir: data/raw
-  output_dir: output
-
-# 异常检测
-anomaly_detection:
-  contamination: 0.05      # 异常比例，越小越严格
-  n_estimators: 200        # 树数量，越大越稳定
-  anomaly_threshold: 0.6   # 异常分数阈值
-
-# 风险评分
-risk_scoring:
-  weights:                 # 5维度权重，总和=1
-    compliance: 0.25
-    sla: 0.25
-    cost: 0.20
-    quality: 0.15
-    equipment: 0.15
-  risk_levels:             # 风险等级划分阈值
-    high: 0.7
-    medium: 0.4
-
-# 库存预测
-inventory_forecast:
-  forecast_days: 30        # 预测天数
-  confidence_interval: 0.95
-  safety_stock_factor: 1.65
-  arima_order: [1, 1, 1]   # ARIMA(p,d,q)
-  prophet_params:
-    changepoint_prior_scale: 0.05
-  lgbm_params:
-    n_estimators: 300
-    learning_rate: 0.05
-```
 
 ## 输出文件说明
 
@@ -393,12 +402,48 @@ inventory_forecast:
 
 ### 交互式仪表盘
 
-`output/dashboard.html` — 自包含的交互式HTML仪表盘，浏览器直接打开即可查看：
+`output/dashboard.html` — 自包含的交互式HTML仪表盘（5个页面）：
 
 - **总览页**: 关键指标卡片 + 异常分数分布 + 风险等级饼图 + 区域对比 + 工单类型异常率
 - **异常检测页**: 分数分布 + 故障/类型/优先级异常率 + PCA降维散点图 + 异常工单Top50表格
-- **风险评分页**: 分数分布 + 风险等级饼图 + 5维雷达图 + 区域/类型风险分 + LR风险因子 + 高风险工单Top10表格
+- **风险评分页**: 分数分布 + 风险等级饼图 + 5维雷达图 + 区域/类型风险分 + LR风险因子 + 高风险工单Top50表格
+- **库存预测页**: 预测趋势图 + 库存状态对比 + 当前/再订货/安全库存对比 + 库存计划明细表格
 - **关联分析页**: 异常分数 vs 风险分数散点图
+
+## 配置说明
+
+所有参数集中在 `config/config.yaml`:
+
+```yaml
+# 数据路径
+data:
+  raw_dir: data/raw
+  output_dir: output
+
+# 异常检测
+anomaly_detection:
+  contamination: 0.05      # 异常比例，越小越严格
+  n_estimators: 200        # 树数量，越大越稳定
+
+# 风险评分
+risk_scoring:
+  weights:                 # 5维度权重，总和=1
+    compliance: 0.25
+    sla: 0.25
+    cost: 0.20
+    quality: 0.15
+    equipment: 0.15
+  risk_levels:             # 风险等级划分阈值
+    high: 0.7
+    medium: 0.4
+
+# 库存预测
+inventory_forecast:
+  forecast_days: 30        # 预测天数
+  confidence_interval: 0.95
+  safety_stock_factor: 1.65
+  arima_order: [1, 1, 1]
+```
 
 ## 技术栈
 
@@ -408,6 +453,7 @@ inventory_forecast:
 | 异常检测 | scikit-learn (IsolationForest, LOF, PCA) |
 | 风险模型 | scikit-learn (LogisticRegression, MLPClassifier) |
 | 时序预测 | prophet >= 1.1, statsmodels (ARIMA), lightgbm >= 4.0 |
+| API 服务 | fastapi, uvicorn |
 | 可视化 | matplotlib >= 3.7, seaborn >= 0.12 |
 | 配置管理 | pyyaml >= 6.0 |
 
@@ -426,6 +472,10 @@ inventory_forecast:
 - 4种工单: 抢修/巡检/保养/改造
 - 7种故障: 过热/短路/漏电/老化/机械故障/电气故障/环境损坏
 - 6种设备: 变压器/开关柜/电缆/电容器/发电机/配电箱
+
+## 部署
+
+GitHub Pages: `index.html` 于仓库根目录。详见 `DEPLOY.md`。推送到 `main` 分支自动部署（约2分钟）。
 
 ## 自定义扩展
 
