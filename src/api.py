@@ -2,14 +2,16 @@
 import sys
 import time
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
+from typing import Annotated
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -19,6 +21,11 @@ from logging_config import setup_logger, get_logger
 from utils import load_config, compute_time_features
 from anomaly_detection import prepare_features, ensemble_detect, analyze_anomaly_reasons
 from risk_scoring import rule_based_score, compute_composite_score, build_lr_features
+from auth import (
+    UserCreate, UserLogin, TokenResponse, ACCESS_TOKEN_EXPIRE_MINUTES,
+    create_user, authenticate_user, create_access_token,
+    get_current_user, require_admin, init_default_users,
+)
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -414,6 +421,7 @@ async def startup():
     log.info("=" * 50)
     log.info("工单数据分析 API 启动")
     log.info("=" * 50)
+    init_default_users()
     _load_models()
 
 
@@ -427,23 +435,64 @@ def health():
     return {"status": "ok", "models_loaded": bool(_models)}
 
 
+# ===== 鉴权端点 =====
+
+@app.post("/auth/register", response_model=TokenResponse)
+def register(user: UserCreate):
+    """注册新用户"""
+    create_user(user.username, user.password, user.role)
+    token = create_access_token(user.username, user.role)
+    return TokenResponse(
+        access_token=token,
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        username=user.username,
+        role=user.role,
+    )
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+def login(creds: UserLogin):
+    """用户登录，返回 JWT Token"""
+    user = authenticate_user(creds.username, creds.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    token = create_access_token(user["username"], user["role"])
+    return TokenResponse(
+        access_token=token,
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        username=user["username"],
+        role=user["role"],
+    )
+
+
+@app.get("/auth/me")
+def get_me(user: Annotated[dict, Depends(get_current_user)]):
+    """获取当前用户信息"""
+    return {"username": user["username"], "role": user["role"]}
+
+
+# ===== 业务端点（需鉴权）=====
+
 @app.post("/api/anomaly", response_model=AnomalyResult)
-def detect_anomaly(ticket: TicketInput):
+def detect_anomaly(ticket: TicketInput, user: Annotated[dict, Depends(get_current_user)]):
     """异常检测：输入工单数据，返回异常标签和分数"""
+    log.info(f"接口调用 | /api/anomaly | user={user['username']}")
     models = _load_models()
     return _predict_anomaly(ticket, models)
 
 
 @app.post("/api/risk", response_model=RiskResult)
-def score_risk(ticket: TicketInput):
+def score_risk(ticket: TicketInput, user: Annotated[dict, Depends(get_current_user)]):
     """风险评分：输入工单数据，返回风险概率和等级"""
+    log.info(f"接口调用 | /api/risk | user={user['username']}")
     models = _load_models()
     return _predict_risk(ticket, models)
 
 
 @app.post("/api/analyze")
-def analyze_ticket(ticket: TicketInput):
+def analyze_ticket(ticket: TicketInput, user: Annotated[dict, Depends(get_current_user)]):
     """综合分析：同时返回异常检测和风险评分"""
+    log.info(f"接口调用 | /api/analyze | user={user['username']}")
     models = _load_models()
     anomaly = _predict_anomaly(ticket, models)
     risk = _predict_risk(ticket, models)
@@ -451,8 +500,9 @@ def analyze_ticket(ticket: TicketInput):
 
 
 @app.post("/api/batch")
-def batch_analyze(batch: BatchTicketInput):
+def batch_analyze(batch: BatchTicketInput, user: Annotated[dict, Depends(get_current_user)]):
     """批量分析：一次提交多条工单"""
+    log.info(f"接口调用 | /api/batch | user={user['username']} | count={len(batch.tickets)}")
     models = _load_models()
     results = []
     for ticket in batch.tickets:
@@ -463,26 +513,30 @@ def batch_analyze(batch: BatchTicketInput):
 
 
 @app.post("/api/inventory/forecast")
-def inventory_forecast(req: InventoryForecastInput):
+def inventory_forecast(req: InventoryForecastInput, user: Annotated[dict, Depends(get_current_user)]):
     """库存需求预测：预测指定物料-站点的未来需求"""
+    log.info(f"接口调用 | /api/inventory/forecast | user={user['username']}")
     return _predict_inventory_forecast(req)
 
 
 @app.post("/api/inventory/plan")
-def inventory_plan(req: InventoryPlanInput):
+def inventory_plan(req: InventoryPlanInput, user: Annotated[dict, Depends(get_current_user)]):
     """库存计划：计算安全库存、再订货点、是否需补货"""
+    log.info(f"接口调用 | /api/inventory/plan | user={user['username']}")
     return _compute_inventory_plan(req)
 
 
 @app.post("/api/inventory/batch-plan")
-def inventory_batch_plan(reqs: list[InventoryPlanInput]):
+def inventory_batch_plan(reqs: list[InventoryPlanInput], user: Annotated[dict, Depends(get_current_user)]):
     """批量库存计划：一次计算多个物料-站点的库存计划"""
+    log.info(f"接口调用 | /api/inventory/batch-plan | user={user['username']} | count={len(reqs)}")
     return {"count": len(reqs), "results": [_compute_inventory_plan(r) for r in reqs]}
 
 
 @app.get("/api/inventory/materials")
-def list_materials():
+def list_materials(user: Annotated[dict, Depends(get_current_user)]):
     """列出所有可用的物料-站点组合"""
+    log.info(f"接口调用 | /api/inventory/materials | user={user['username']}")
     inv = _load_inventory_data()
     combos = inv.groupby(["material_id", "site_id"]).agg(
         days=("date", "count"),
@@ -492,6 +546,16 @@ def list_materials():
     combos["avg_stock"] = combos["avg_stock"].round(0).astype(int)
     combos["avg_consumed"] = combos["avg_consumed"].round(1)
     return {"count": len(combos), "materials": combos.to_dict("records")}
+
+
+# ===== 管理员端点 =====
+
+@app.get("/admin/users")
+def list_users(user: Annotated[dict, Depends(require_admin)]):
+    """列出所有用户（仅管理员）"""
+    from auth import _load_users
+    users = _load_users()
+    return {"count": len(users), "users": [{"username": u, "role": v["role"], "created_at": v.get("created_at")} for u, v in users.items()]}
 
 
 if __name__ == "__main__":
