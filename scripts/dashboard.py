@@ -200,7 +200,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto
 .tab { padding: 14px 24px; cursor: pointer; border-bottom: 3px solid transparent; font-size: 15px; font-weight: 500; color: #666; transition: all 0.2s; }
 .tab:hover { color: #1a1a2e; }
 .tab.active { color: #0f3460; border-bottom-color: #0f3460; }
-.content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.content { padding: 24px; max-width: 2000px; margin: 0 auto; }
 .page { display: none; }
 .page.active { display: block; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
