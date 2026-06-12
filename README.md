@@ -12,12 +12,15 @@
 │   │   ├── ticket_main.csv      # 工单主表
 │   │   ├── ticket_materials.csv # 工单-物料明细
 │   │   └── inventory_daily.csv  # 库存日表
-│   └── processed/               # 中间处理数据
+│   ├── processed/               # 中间处理数据
+│   └── users.json               # 用户账户数据 (JWT鉴权)
 ├── src/
 │   ├── anomaly_detection.py     # 异常检测模块
 │   ├── risk_scoring.py          # 风险评分模块
 │   ├── inventory_forecast.py    # 库存预测模块
-│   ├── api.py                   # REST API 服务
+│   ├── api.py                   # REST API 服务 (FastAPI)
+│   ├── auth.py                  # JWT 鉴权模块
+│   ├── logging_config.py        # 日志配置
 │   └── utils.py                 # 共享工具函数
 ├── scripts/
 │   ├── generate_data.py         # 合成数据生成器
@@ -27,13 +30,20 @@
 │   └── test_api.py              # API 测试脚本
 ├── output/
 │   ├── dashboard.html           # 交互式仪表盘
+│   ├── logs/                    # API 运行日志
+│   │   └── api.log
 │   ├── anomaly_detection_results.csv
 │   ├── risk_scoring_results.csv
 │   ├── inventory_forecast_results.csv
 │   ├── inventory_plan_results.csv
 │   └── charts/                  # 7张可视化图表
+├── .github/workflows/
+│   └── ci.yml                   # GitHub Actions CI
 ├── index.html                   # GitHub Pages 首页
 ├── requirements.txt
+├── API.md                       # API 接口文档
+├── DEPLOY.md                    # 部署文档
+├── AGENTS.md                    # Agent 指南
 └── README.md
 ```
 
@@ -137,11 +147,14 @@ curl -X POST http://localhost:8000/api/anomaly \
 
 ### 请求示例
 
+> 注意：以下接口需要先登录获取 Token，详见鉴权说明。
+
 **异常检测**：
 
 ```bash
 curl -X POST http://localhost:8000/api/anomaly \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "ticket_id": "TK-001",
     "ticket_type": "抢修",
@@ -172,6 +185,7 @@ curl -X POST http://localhost:8000/api/anomaly \
 ```bash
 curl -X POST http://localhost:8000/api/risk \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "ticket_id": "TK-002",
     "ticket_type": "保养",
@@ -198,6 +212,7 @@ curl -X POST http://localhost:8000/api/risk \
 ```bash
 curl -X POST http://localhost:8000/api/inventory/forecast \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"material_id": "MAT0020", "site_id": "SITE0001", "forecast_days": 30}'
 ```
 
@@ -222,6 +237,7 @@ curl -X POST http://localhost:8000/api/inventory/forecast \
 ```bash
 curl -X POST http://localhost:8000/api/inventory/plan \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "material_id": "MAT0020",
     "site_id": "SITE0001",
@@ -497,7 +513,8 @@ inventory_forecast:
 | 异常检测 | scikit-learn (IsolationForest, LOF, PCA) |
 | 风险模型 | scikit-learn (LogisticRegression, MLPClassifier) |
 | 时序预测 | prophet >= 1.1, statsmodels (ARIMA), lightgbm >= 4.0 |
-| API 服务 | fastapi, uvicorn |
+| API 服务 | fastapi, uvicorn, PyJWT |
+| 鉴权 | JWT (PyJWT) + SHA256 密码哈希 |
 | 可视化 | matplotlib >= 3.7, seaborn >= 0.12 |
 | 配置管理 | pyyaml >= 6.0 |
 
