@@ -249,13 +249,14 @@ async function refreshData() {
     const data = await api('/api/results/latest');
     updateCards(data);
     updateBadges(data);
-    try { renderCharts(data); } catch(e) { console.error('Chart error:', e); }
+    try { renderCharts(data); } catch(e) { console.error('Chart render error:', e); }
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
     setLoading('ok');
     countdownValue = 30;
   } catch (e) {
+    console.error('Refresh failed:', e);
     setLoading('error');
-    console.error('Refresh error:', e);
+    document.getElementById('statusText').textContent = '加载失败: ' + e.message;
   }
 }
 
@@ -280,7 +281,7 @@ function updateCards(data) {
 function updateBadges(data) {
   const a = data.anomaly || {};
   const r = data.risk || {};
-  const f = data.forecast || {};
+  const p = data.plan || {};
   document.getElementById('anomalyBadge').textContent = `${a.anomaly_count || 0} 异常`;
   document.getElementById('riskBadge').textContent = `${r.high || 0} 高 / ${r.medium || 0} 中`;
   document.getElementById('inventoryBadge').textContent = `${p.need_reorder || 0} 需补货`;
