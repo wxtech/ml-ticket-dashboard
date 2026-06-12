@@ -1,17 +1,21 @@
 """工单分析 API 服务"""
 import sys
+import time
+import json
 from pathlib import Path
+from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 import uvicorn
 
+from logging_config import setup_logger, get_logger
 from utils import load_config, compute_time_features
 from anomaly_detection import prepare_features, ensemble_detect, analyze_anomaly_reasons
 from risk_scoring import rule_based_score, compute_composite_score, build_lr_features
@@ -19,10 +23,38 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
+# 初始化日志
+setup_logger("ticket_analysis", level="INFO", log_file="output/logs/api.log")
+log = get_logger("api")
+
 app = FastAPI(title="工单数据分析 API", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 config = load_config()
+
+
+# ===== 请求日志中间件 =====
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """记录所有API请求的输入输出"""
+    start = time.time()
+    body = None
+    if request.method in ("POST", "PUT"):
+        try:
+            body_bytes = await request.body()
+            body = body_bytes.decode("utf-8")[:500]
+        except Exception:
+            body = "<unreadable>"
+
+    response = await call_next(request)
+
+    elapsed = round((time.time() - start) * 1000, 1)
+    status = response.status_code
+    level = "WARNING" if status >= 400 else "INFO"
+    log.log(getattr(logging, level), f"{request.method} {request.url.path} | {status} | {elapsed}ms" + (f" | body={body[:200]}" if body else ""))
+
+    return response
 
 
 # ===== 数据模型 =====
@@ -108,7 +140,8 @@ def _load_models():
     if _models:
         return _models
 
-    print("加载训练数据并训练模型...")
+    log.info("开始加载训练数据并训练模型...")
+    t0 = time.time()
     from anomaly_detection import prepare_features as af_prepare
     from risk_scoring import build_lr_features as lr_prepare
 
@@ -175,7 +208,8 @@ def _load_models():
         "thresholds": thresholds,
         "weights": rs_config["weights"],
     })
-    print("  模型加载完成!")
+    elapsed = round(time.time() - t0, 2)
+    log.info(f"模型加载完成! 耗时 {elapsed}s (异常检测+风险评分模型)")
     return _models
 
 
@@ -196,6 +230,7 @@ def _ticket_to_df(ticket: TicketInput) -> pd.DataFrame:
 
 def _predict_anomaly(ticket: TicketInput, models: dict) -> dict:
     """预测单条工单的异常"""
+    t0 = time.time()
     df = _ticket_to_df(ticket)
 
     # 特征工程（复用训练时的逻辑）
@@ -230,16 +265,20 @@ def _predict_anomaly(ticket: TicketInput, models: dict) -> dict:
     # 异常原因
     reasons = analyze_anomaly_reasons(df, X.values, models["feat_names"], None, top_n=3)
 
-    return {
+    elapsed = round((time.time() - t0) * 1000, 1)
+    result = {
         "ticket_id": ticket.ticket_id,
         "anomaly_label": 1 if label == -1 else 0,
         "anomaly_score": score_norm,
         "anomaly_reasons": reasons[0] if reasons else [],
     }
+    log.info(f"异常检测 | {ticket.ticket_id} | label={result['anomaly_label']} score={result['anomaly_score']} | {elapsed}ms")
+    return result
 
 
 def _predict_risk(ticket: TicketInput, models: dict) -> dict:
     """预测单条工单的风险"""
+    t0 = time.time()
     df = _ticket_to_df(ticket)
 
     # 规则评分
@@ -273,7 +312,8 @@ def _predict_risk(ticket: TicketInput, models: dict) -> dict:
     top_dims = sorted(dim_scores.items(), key=lambda x: x[1], reverse=True)[:3]
     explanation = "; ".join([f"{d}({v:.2f})" for d, v in top_dims if v > 0.1])
 
-    return {
+    elapsed = round((time.time() - t0) * 1000, 1)
+    result = {
         "ticket_id": ticket.ticket_id,
         "risk_score": round(composite, 4),
         "risk_level": level,
@@ -281,6 +321,8 @@ def _predict_risk(ticket: TicketInput, models: dict) -> dict:
         "risk_dimensions": {k: round(v, 4) for k, v in dim_scores.items()},
         "risk_explanation": explanation,
     }
+    log.info(f"风险评分 | {ticket.ticket_id} | score={result['risk_score']} level={result['risk_level']} prob={result['final_risk_prob']} | {elapsed}ms")
+    return result
 
 
 def _load_inventory_data():
@@ -291,14 +333,17 @@ def _load_inventory_data():
 
 def _predict_inventory_forecast(req: InventoryForecastInput) -> dict:
     """库存需求预测"""
+    t0 = time.time()
     from inventory_forecast import prepare_series, forecast_prophet, forecast_arima, forecast_lgbm, ensemble_forecast
 
     inv = _load_inventory_data()
     series = prepare_series(inv, req.material_id, req.site_id)
 
     if len(series) < 30:
+        log.warning(f"库存预测数据不足 | {req.material_id}@{req.site_id} | 仅{len(series)}天")
         raise HTTPException(status_code=400, detail=f"数据不足: {req.material_id}@{req.site_id} 仅有{len(series)}天数据，需要至少30天")
 
+    log.info(f"库存预测开始 | {req.material_id}@{req.site_id} | {len(series)}天历史 → {req.forecast_days}天预测")
     forecast_days = req.forecast_days
     prophet_f = forecast_prophet(series, forecast_days, config)
     arima_f = forecast_arima(series, forecast_days, config)
@@ -309,6 +354,10 @@ def _predict_inventory_forecast(req: InventoryForecastInput) -> dict:
     avg_daily = float(series["daily_consumed"].mean())
     std_daily = float(series["daily_consumed"].std())
     current_stock = float(series["stock_on_hand"].iloc[-1])
+
+    elapsed = round(time.time() - t0, 2)
+    total = round(float(ensemble_f["forecast"].sum()), 1)
+    log.info(f"库存预测完成 | {req.material_id}@{req.site_id} | 总需求={total} 日均={round(float(ensemble_f['forecast'].mean()), 2)} | {elapsed}s")
 
     return {
         "material_id": req.material_id,
@@ -322,7 +371,7 @@ def _predict_inventory_forecast(req: InventoryForecastInput) -> dict:
              "lower": round(row["lower"], 2), "upper": round(row["upper"], 2)}
             for _, row in ensemble_f.iterrows()
         ],
-        "forecast_total": round(float(ensemble_f["forecast"].sum()), 1),
+        "forecast_total": total,
         "forecast_avg": round(float(ensemble_f["forecast"].mean()), 2),
     }
 
@@ -339,6 +388,8 @@ def _compute_inventory_plan(req: InventoryPlanInput) -> dict:
     days_until_stockout = round(req.current_stock / max(req.avg_daily_demand, 0.1), 1)
     need_reorder = req.current_stock < reorder_point
     recommended_qty = round(max(0, reorder_point - req.current_stock + safety_stock), 1) if need_reorder else 0
+
+    log.info(f"库存计划 | {req.material_id}@{req.site_id} | 库存={req.current_stock} 安全库存={safety_stock} 再订货点={reorder_point} 可售={days_until_stockout}天 需补货={need_reorder}")
 
     return {
         "material_id": req.material_id,
@@ -360,6 +411,9 @@ def _compute_inventory_plan(req: InventoryPlanInput) -> dict:
 
 @app.on_event("startup")
 async def startup():
+    log.info("=" * 50)
+    log.info("工单数据分析 API 启动")
+    log.info("=" * 50)
     _load_models()
 
 
