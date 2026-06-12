@@ -9,6 +9,7 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
@@ -33,7 +34,22 @@ from auth import (
 setup_logger("ticket_analysis", level="INFO", log_file="output/logs/app.log")
 log = get_logger("app")
 
-app = FastAPI(title="工单数据分析系统")
+config = load_config()
+
+
+# ===== 生命周期管理 =====
+
+@asynccontextmanager
+async def lifespan(app):
+    log.info("=" * 50)
+    log.info("工单数据分析系统 Web 应用启动")
+    log.info("=" * 50)
+    init_default_users()
+    yield
+    log.info("工单数据分析系统 Web 应用关闭")
+
+
+app = FastAPI(title="工单数据分析系统", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # 模板
@@ -43,8 +59,6 @@ templates = Jinja2Templates(directory="templates")
 static_dir = Path("static")
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-config = load_config()
 
 # ===== 全局状态 =====
 tasks = {}
@@ -332,14 +346,6 @@ def _load_latest_results() -> dict:
         pass
 
     return results
-
-
-@app.on_event("startup")
-async def startup():
-    log.info("=" * 50)
-    log.info("工单数据分析系统 Web 应用启动")
-    log.info("=" * 50)
-    init_default_users()
 
 
 if __name__ == "__main__":

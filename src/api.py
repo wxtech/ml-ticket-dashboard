@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Annotated
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
@@ -34,10 +35,24 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 setup_logger("ticket_analysis", level="INFO", log_file="output/logs/api.log")
 log = get_logger("api")
 
-app = FastAPI(title="工单数据分析 API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
 config = load_config()
+
+
+# ===== 生命周期管理 =====
+
+@asynccontextmanager
+async def lifespan(app):
+    log.info("=" * 50)
+    log.info("工单数据分析 API 启动")
+    log.info("=" * 50)
+    init_default_users()
+    _load_models()
+    yield
+    log.info("工单数据分析 API 关闭")
+
+
+app = FastAPI(title="工单数据分析 API", version="1.0.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
 # ===== 请求日志中间件 =====
@@ -415,14 +430,6 @@ def _compute_inventory_plan(req: InventoryPlanInput) -> dict:
 
 
 # ===== API 端点 =====
-
-@app.on_event("startup")
-async def startup():
-    log.info("=" * 50)
-    log.info("工单数据分析 API 启动")
-    log.info("=" * 50)
-    init_default_users()
-    _load_models()
 
 
 @app.get("/")
