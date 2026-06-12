@@ -68,6 +68,107 @@ python src/risk_scoring.py        # 仅风险评分
 python src/inventory_forecast.py  # 仅库存预测
 ```
 
+## API 服务
+
+启动 API 服务后，可通过 HTTP 接口调用异常检测和风险评分。
+
+```bash
+# 启动服务 (默认端口 8000)
+python src/api.py
+
+# 查看接口文档
+open http://localhost:8000/docs
+
+# 运行测试脚本
+python scripts/test_api.py
+```
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/api/anomaly` | POST | 异常检测 |
+| `/api/risk` | POST | 风险评分 |
+| `/api/analyze` | POST | 综合分析（异常+风险） |
+| `/api/batch` | POST | 批量分析 |
+
+### 请求示例
+
+**异常检测**：
+
+```bash
+curl -X POST http://localhost:8000/api/anomaly \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ticket_id": "TK-001",
+    "ticket_type": "抢修",
+    "priority": "紧急",
+    "total_cost": 45000,
+    "budget_limit": 5000,
+    "fault_category": "过热",
+    "is_reopened": true,
+    "customer_complaint": true
+  }'
+```
+
+**响应**：
+
+```json
+{
+  "ticket_id": "TK-001",
+  "anomaly_label": 1,
+  "anomaly_score": 0.82,
+  "anomaly_reasons": [
+    {"feature": "total_cost", "deviation": 3.5, "importance": 0.05, "value": 3.5}
+  ]
+}
+```
+
+**风险评分**：
+
+```bash
+curl -X POST http://localhost:8000/api/risk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ticket_id": "TK-002",
+    "ticket_type": "保养",
+    "total_cost": 8000,
+    "budget_limit": 5000
+  }'
+```
+
+**响应**：
+
+```json
+{
+  "ticket_id": "TK-002",
+  "risk_score": 0.23,
+  "risk_level": "low",
+  "final_risk_prob": 0.28,
+  "risk_dimensions": {"compliance": 0, "sla": 0, "cost": 1.0, "quality": 0, "equipment": 0.2},
+  "risk_explanation": "cost(1.00); equipment(0.20)"
+}
+```
+
+### 工单字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `ticket_id` | string | 否 | 工单编号（默认自动生成） |
+| `ticket_type` | string | 否 | 抢修/巡检/保养/改造 |
+| `priority` | string | 否 | 紧急/高/中/低 |
+| `total_cost` | float | 否 | 总成本 |
+| `budget_limit` | float | 否 | 预算上限 |
+| `fault_category` | string | 否 | 过热/短路/漏电/老化/机械故障/电气故障/环境损坏 |
+| `severity` | string | 否 | 严重/一般/轻微 |
+| `is_reopened` | bool | 否 | 是否重开 |
+| `customer_complaint` | bool | 否 | 是否投诉 |
+| `customer_satisfaction` | int | 否 | 满意度 1-5 |
+| `photo_count` | int | 否 | 照片数 |
+| `report_uploaded` | bool | 否 | 报告是否上传 |
+| `customer_signature` | bool | 否 | 客户是否签字 |
+
 ## 数据模型
 
 ### 三张主表
