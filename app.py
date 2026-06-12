@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "scripts"))
 
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Request, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
