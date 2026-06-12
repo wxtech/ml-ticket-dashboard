@@ -1,0 +1,14 @@
+{
+  "admin": {
+    "username": "admin",
+    "hashed_password": "902bf779586b15d07963512e78367d91:6156816dbe5ec88d6ee8ad30170bf5c12bbc5cd8c2937ed31f35059dc73a4c6e",
+    "role": "admin",
+    "created_at": "2026-06-12T11:11:37.264715"
+  },
+  "demo": {
+    "username": "demo",
+    "hashed_password": "e1ed3febfd438c8b629e0c3e9fcb6479:cd514bbc6f064c45e221047059b63c2a356de0b27eec5737196be27964c282d8",
+    "role": "user",
+    "created_at": "2026-06-12T11:11:37.265445"
+  }
+}
