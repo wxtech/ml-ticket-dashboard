@@ -13,12 +13,13 @@
 │   │   ├── ticket_materials.csv # 工单-物料明细
 │   │   └── inventory_daily.csv  # 库存日表
 │   ├── processed/               # 中间处理数据
+│   ├── uploads/                 # 用户上传的文件
 │   └── users.json               # 用户账户数据 (JWT鉴权)
 ├── src/
 │   ├── anomaly_detection.py     # 异常检测模块
 │   ├── risk_scoring.py          # 风险评分模块
 │   ├── inventory_forecast.py    # 库存预测模块
-│   ├── api.py                   # REST API 服务 (FastAPI)
+│   ├── api.py                   # REST API 服务 (FastAPI, :8000)
 │   ├── auth.py                  # JWT 鉴权模块
 │   ├── logging_config.py        # 日志配置
 │   └── utils.py                 # 共享工具函数
@@ -28,10 +29,13 @@
 │   ├── visualize.py             # 可视化图表生成
 │   ├── dashboard.py             # 交互式仪表盘生成
 │   └── test_api.py              # API 测试脚本
+├── templates/                   # Web 应用页面
+│   ├── login.html               # 登录页
+│   ├── dashboard.html           # 仪表盘首页
+│   └── upload.html              # 数据上传页
 ├── output/
-│   ├── dashboard.html           # 交互式仪表盘
-│   ├── logs/                    # API 运行日志
-│   │   └── api.log
+│   ├── dashboard.html           # 独立分析仪表盘
+│   ├── logs/                    # 运行日志
 │   ├── anomaly_detection_results.csv
 │   ├── risk_scoring_results.csv
 │   ├── inventory_forecast_results.csv
@@ -39,6 +43,7 @@
 │   └── charts/                  # 7张可视化图表
 ├── .github/workflows/
 │   └── ci.yml                   # GitHub Actions CI
+├── app.py                       # Web 应用入口 (:8080)
 ├── index.html                   # GitHub Pages 首页
 ├── requirements.txt
 ├── API.md                       # API 接口文档
@@ -72,6 +77,43 @@ xdg-open output/dashboard.html   # Linux
 python src/anomaly_detection.py   # 仅异常检测
 python src/risk_scoring.py        # 仅风险评分
 python src/inventory_forecast.py  # 仅库存预测
+```
+
+## Web 应用
+
+```bash
+# 启动 Web 应用 (默认端口 8080)
+python app.py
+
+# 浏览器打开
+open http://localhost:8080        # macOS
+xdg-open http://localhost:8080   # Linux
+```
+
+### 功能页面
+
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| 登录 | `/login` | 用户名密码登录 |
+| 仪表盘 | `/dashboard` | 最新分析结果、图表、任务状态 |
+| 数据上传 | `/upload` | 拖拽上传CSV，后台自动分析 |
+| 详细分析 | `/analysis` | 完整交互式仪表盘 |
+
+### 默认账户
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| admin | admin123 | admin |
+| demo | demo123 | user |
+
+### 使用流程
+
+```
+1. 登录 → /login
+2. 上传数据 → /upload (拖拽CSV，选择数据类型)
+3. 后台自动分析 → 异常检测 → 风险评分 → 库存预测
+4. 查看结果 → /dashboard (自动刷新)
+5. 查看详细分析 → /analysis
 ```
 
 ## API 服务

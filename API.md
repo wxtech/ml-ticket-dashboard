@@ -2,24 +2,37 @@
 
 ## 概述
 
-基于 FastAPI 的 REST API，提供异常检测、风险评分和库存预测功能。支持 JWT 鉴权。
-
-- **基础地址**: `http://localhost:8000`
-- **Swagger 文档**: `http://localhost:8000/docs`
-- **ReDoc 文档**: `http://localhost:8000/redoc`
+本系统提供两种服务：
+- **Web 应用** (`app.py`, 端口 8080): 浏览器访问，带登录/仪表盘/上传页面
+- **REST API** (`src/api.py`, 端口 8000): 程序化调用，Swagger 文档
 
 ## 启动
 
 ```bash
-# 启动服务
-python src/api.py
+# 启动 Web 应用 (推荐，端口 8080)
+python app.py
 
-# 指定端口
-uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
+# 启动 REST API (端口 8000)
+python src/api.py
 
 # 运行测试
 python scripts/test_api.py
 ```
+
+## Web 应用端点 (app.py :8080)
+
+| 端点 | 方法 | 说明 | 鉴权 |
+|------|------|------|------|
+| `/login` | GET | 登录页面 | 无需 |
+| `/dashboard` | GET | 仪表盘首页 | 需要 |
+| `/upload` | GET | 数据上传页 | 需要 |
+| `/analysis` | GET | 详细分析仪表盘 | 无需 |
+| `/api/auth/login` | POST | 登录获取 Token | 无需 |
+| `/api/auth/register` | POST | 注册新用户 | 无需 |
+| `/api/upload` | POST | 上传CSV文件 | 需要 |
+| `/api/tasks` | GET | 任务列表 | 无需 |
+| `/api/tasks/{task_id}` | GET | 任务状态 | 无需 |
+| `/api/results/latest` | GET | 最新分析结果 | 无需 |
 
 ## 鉴权说明
 
@@ -41,7 +54,9 @@ API 使用 JWT (JSON Web Token) 鉴权。所有 `/api/*` 接口需要在请求�
 
 ---
 
-## 端点总览
+---
+
+## REST API 端点 (src/api.py :8000)
 
 | 端点 | 方法 | 说明 | 鉴权 |
 |------|------|------|------|
@@ -58,6 +73,60 @@ API 使用 JWT (JSON Web Token) 鉴权。所有 `/api/*` 接口需要在请求�
 | `/api/inventory/batch-plan` | POST | 批量库存计划 | 需要 |
 | `/api/inventory/materials` | GET | 物料列表 | 需要 |
 | `/admin/users` | GET | 用户列表 | 需要 admin |
+
+---
+
+## Web 应用端点详解 (app.py :8080)
+
+### 上传文件
+
+```
+POST /api/upload
+```
+
+上传 CSV 文件并自动触发后台分析任务。
+
+**请求**: `multipart/form-data`
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `file` | file | 是 | CSV 文件 |
+| `ticket_type` | string | 是 | ticket_main / ticket_materials / inventory_daily |
+| `token` | string | 是 | JWT Token |
+
+**响应**:
+
+```json
+{
+  "task_id": "2bcd2816",
+  "status": "running",
+  "rows": 5000
+}
+```
+
+### 任务状态
+
+```
+GET /api/tasks/{task_id}
+```
+
+| status 值 | 说明 |
+|-----------|------|
+| `running` | 分析中 |
+| `completed` | 完成 |
+| `failed` | 失败 |
+
+### 最新结果
+
+```
+GET /api/results/latest
+```
+
+返回最新分析结果汇总（异常检测、风险评分、库存预测）。
+
+---
+
+## REST API 端点详解
 
 ---
 
