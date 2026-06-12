@@ -2,7 +2,7 @@
 
 ## 概述
 
-基于 FastAPI 的 REST API，提供异常检测、风险评分和库存预测功能。
+基于 FastAPI 的 REST API，提供异常检测、风险评分和库存预测功能。支持 JWT 鉴权。
 
 - **基础地址**: `http://localhost:8000`
 - **Swagger 文档**: `http://localhost:8000/docs`
@@ -21,19 +21,158 @@ uvicorn src.api:app --host 0.0.0.0 --port 8000 --reload
 python scripts/test_api.py
 ```
 
+## 鉴权说明
+
+API 使用 JWT (JSON Web Token) 鉴权。所有 `/api/*` 接口需要在请求头中携带 Token。
+
+### 默认账户
+
+| 用户名 | 密码 | 角色 | 说明 |
+|--------|------|------|------|
+| admin | admin123 | admin | 管理员，可访问所有接口 |
+| demo | demo123 | user | 普通用户，可访问业务接口 |
+
+### Token 配置
+
+- **有效期**: 24小时
+- **算法**: HS256
+- **密钥**: 见 `src/auth.py` 中的 `SECRET_KEY`（生产环境需修改）
+- **用户数据**: `data/users.json`
+
+---
+
 ## 端点总览
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/api/anomaly` | POST | 异常检测 |
-| `/api/risk` | POST | 风险评分 |
-| `/api/analyze` | POST | 综合分析（异常+风险） |
-| `/api/batch` | POST | 批量工单分析 |
-| `/api/inventory/forecast` | POST | 库存需求预测 |
-| `/api/inventory/plan` | POST | 库存计划计算 |
-| `/api/inventory/batch-plan` | POST | 批量库存计划 |
-| `/api/inventory/materials` | GET | 物料列表 |
+| 端点 | 方法 | 说明 | 鉴权 |
+|------|------|------|------|
+| `/health` | GET | 健康检查 | 无需 |
+| `/auth/login` | POST | 登录获取 Token | 无需 |
+| `/auth/register` | POST | 注册新用户 | 无需 |
+| `/auth/me` | GET | 获取当前用户信息 | 需要 |
+| `/api/anomaly` | POST | 异常检测 | 需要 |
+| `/api/risk` | POST | 风险评分 | 需要 |
+| `/api/analyze` | POST | 综合分析（异常+风险） | 需要 |
+| `/api/batch` | POST | 批量工单分析 | 需要 |
+| `/api/inventory/forecast` | POST | 库存需求预测 | 需要 |
+| `/api/inventory/plan` | POST | 库存计划计算 | 需要 |
+| `/api/inventory/batch-plan` | POST | 批量库存计划 | 需要 |
+| `/api/inventory/materials` | GET | 物料列表 | 需要 |
+| `/admin/users` | GET | 用户列表 | 需要 admin |
+
+---
+
+## 鉴权端点
+
+### 登录
+
+```
+POST /auth/login
+```
+
+**请求体**:
+
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+
+**响应**:
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "username": "admin",
+  "role": "admin"
+}
+```
+
+**curl 示例**:
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+```
+
+### 注册
+
+```
+POST /auth/register
+```
+
+**请求体**:
+
+```json
+{
+  "username": "newuser",
+  "password": "password123",
+  "role": "user"
+}
+```
+
+**响应**: 同登录响应，返回 Token。
+
+### 获取当前用户
+
+```
+GET /auth/me
+```
+
+**请求头**: `Authorization: Bearer <token>`
+
+**响应**:
+
+```json
+{
+  "username": "admin",
+  "role": "admin"
+}
+```
+
+---
+
+## 使用示例
+
+### 完整调用流程
+
+```bash
+# 1. 登录获取 Token
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+# 2. 使用 Token 调用接口
+curl -X POST http://localhost:8000/api/anomaly \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"ticket_id": "TK-001", "ticket_type": "抢修", "total_cost": 50000}'
+```
+
+### Python 示例
+
+```python
+import requests
+
+# 登录
+resp = requests.post("http://localhost:8000/auth/login", json={
+    "username": "admin",
+    "password": "admin123"
+})
+token = resp.json()["access_token"]
+
+# 调用异常检测
+headers = {"Authorization": f"Bearer {token}"}
+resp = requests.post("http://localhost:8000/api/anomaly",
+    headers=headers,
+    json={"ticket_id": "TK-001", "ticket_type": "抢修", "total_cost": 50000}
+)
+print(resp.json())
+```
 
 ---
 
@@ -132,6 +271,7 @@ POST /api/anomaly
 ```bash
 curl -X POST http://localhost:8000/api/anomaly \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "ticket_id": "TK-001",
     "ticket_type": "抢修",
@@ -200,6 +340,7 @@ POST /api/risk
 ```bash
 curl -X POST http://localhost:8000/api/risk \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "ticket_id": "TK-002",
     "ticket_type": "保养",
@@ -246,6 +387,7 @@ POST /api/analyze
 ```bash
 curl -X POST http://localhost:8000/api/analyze \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "ticket_id": "TK-003",
     "ticket_type": "巡检",
@@ -304,6 +446,7 @@ POST /api/batch
 ```bash
 curl -X POST http://localhost:8000/api/batch \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "tickets": [
       {"ticket_id": "B-001", "total_cost": 500, "budget_limit": 1000},
@@ -374,6 +517,7 @@ POST /api/inventory/forecast
 ```bash
 curl -X POST http://localhost:8000/api/inventory/forecast \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{"material_id": "MAT0020", "site_id": "SITE0001", "forecast_days": 7}'
 ```
 
@@ -454,6 +598,7 @@ POST /api/inventory/plan
 ```bash
 curl -X POST http://localhost:8000/api/inventory/plan \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -d '{
     "material_id": "MAT0020",
     "site_id": "SITE0001",
@@ -561,7 +706,8 @@ GET /api/inventory/materials
 **curl 示例**:
 
 ```bash
-curl http://localhost:8000/api/inventory/materials
+curl http://localhost:8000/api/inventory/materials \
+  -H "Authorization: Bearer <token>"
 ```
 
 ---
@@ -572,6 +718,8 @@ curl http://localhost:8000/api/inventory/materials
 |--------|------|
 | 200 | 成功 |
 | 400 | 请求参数错误（如数据不足） |
+| 401 | 未认证（Token 缺失或无效） |
+| 403 | 权限不足（普通用户访问管理员接口） |
 | 422 | 请求体验证失败（字段类型/必填） |
 | 500 | 服务器内部错误 |
 
@@ -580,6 +728,18 @@ curl http://localhost:8000/api/inventory/materials
 ```json
 {
   "detail": "数据不足: MAT0020@SITE0001 仅有15天数据，需要至少30天"
+}
+```
+
+```json
+{
+  "detail": "Token 已过期"
+}
+```
+
+```json
+{
+  "detail": "需要管理员权限"
 }
 ```
 
@@ -632,4 +792,15 @@ python src/api.py
 
 # 另开终端测试
 python scripts/test_api.py
+
+# 手动测试鉴权
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -X POST http://localhost:8000/api/anomaly \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"ticket_id": "TEST-001", "ticket_type": "抢修", "total_cost": 50000}'
 ```

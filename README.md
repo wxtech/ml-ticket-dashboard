@@ -77,19 +77,63 @@ open http://localhost:8000/docs
 python scripts/test_api.py
 ```
 
+### 鉴权说明
+
+API 使用 JWT 鉴权，所有 `/api/*` 接口需要携带 Token。
+
+**默认账户**：
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| admin | admin123 | admin |
+| demo | demo123 | user |
+
+**获取 Token**：
+
+```bash
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+```
+
+**响应**：
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer",
+  "expires_in": 86400,
+  "username": "admin",
+  "role": "admin"
+}
+```
+
+**使用 Token 访问接口**：
+
+```bash
+curl -X POST http://localhost:8000/api/anomaly \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"ticket_id": "TK-001", "ticket_type": "抢修", "total_cost": 50000}'
+```
+
 ### API 端点总览
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/health` | GET | 健康检查 |
-| `/api/anomaly` | POST | 异常检测 |
-| `/api/risk` | POST | 风险评分 |
-| `/api/analyze` | POST | 综合分析（异常+风险） |
-| `/api/batch` | POST | 批量工单分析 |
-| `/api/inventory/forecast` | POST | 库存需求预测 |
-| `/api/inventory/plan` | POST | 库存计划计算 |
-| `/api/inventory/batch-plan` | POST | 批量库存计划 |
-| `/api/inventory/materials` | GET | 物料列表 |
+| 端点 | 方法 | 说明 | 鉴权 |
+|------|------|------|------|
+| `/health` | GET | 健康检查 | 无需 |
+| `/auth/login` | POST | 登录获取 Token | 无需 |
+| `/auth/register` | POST | 注册新用户 | 无需 |
+| `/auth/me` | GET | 获取当前用户信息 | 需要 |
+| `/api/anomaly` | POST | 异常检测 | 需要 |
+| `/api/risk` | POST | 风险评分 | 需要 |
+| `/api/analyze` | POST | 综合分析（异常+风险） | 需要 |
+| `/api/batch` | POST | 批量工单分析 | 需要 |
+| `/api/inventory/forecast` | POST | 库存需求预测 | 需要 |
+| `/api/inventory/plan` | POST | 库存计划计算 | 需要 |
+| `/api/inventory/batch-plan` | POST | 批量库存计划 | 需要 |
+| `/api/inventory/materials` | GET | 物料列表 | 需要 |
+| `/admin/users` | GET | 用户列表 | 需要 admin |
 
 ### 请求示例
 
