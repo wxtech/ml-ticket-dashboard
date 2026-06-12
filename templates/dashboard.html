@@ -101,7 +101,7 @@ async function refreshData() {
   try {
     const data = await api('/api/results/latest');
     renderOverview(data);
-    renderCharts(data);
+    try { renderCharts(data); } catch(e) { console.error('Chart error:', e); }
     document.getElementById('lastUpdate').textContent = '更新: ' + (data.last_updated || '无数据');
     document.getElementById('statusDot').className = 'status-dot';
     document.getElementById('statusText').textContent = '数据正常';
@@ -128,12 +128,24 @@ function renderOverview(data) {
 }
 
 function renderCharts(data) {
+  if (typeof Chart === 'undefined') {
+    document.getElementById('statusText').textContent = 'Chart.js 未加载，图表不可用';
+    return;
+  }
+
   const a = data.anomaly || {};
   const r = data.risk || {};
+  const f = data.forecast || {};
+  const p = data.plan || {};
 
-  // 异常分数分布 (简化饼图)
-  if (window.anomalyChart) window.anomalyChart.destroy();
-  window.anomalyChart = new Chart(document.getElementById('anomalyChart'), {
+  // 安全销毁旧图表
+  function safeDestroy(chartVar) {
+    try { if (chartVar && typeof chartVar.destroy === 'function') chartVar.destroy(); } catch(e) {}
+  }
+
+  // 异常分数分布
+  safeDestroy(window._anomalyChart);
+  window._anomalyChart = new Chart(document.getElementById('anomalyChart'), {
     type: 'doughnut',
     data: {
       labels: ['正常', '异常'],
@@ -143,8 +155,8 @@ function renderCharts(data) {
   });
 
   // 风险等级分布
-  if (window.riskChart) window.riskChart.destroy();
-  window.riskChart = new Chart(document.getElementById('riskChart'), {
+  safeDestroy(window._riskChart);
+  window._riskChart = new Chart(document.getElementById('riskChart'), {
     type: 'doughnut',
     data: {
       labels: ['高风险', '中风险', '低风险'],
@@ -154,10 +166,8 @@ function renderCharts(data) {
   });
 
   // 库存概览
-  if (window.inventoryChart) window.inventoryChart.destroy();
-  const f = data.forecast || {};
-  const p = data.plan || {};
-  window.inventoryChart = new Chart(document.getElementById('inventoryChart'), {
+  safeDestroy(window._inventoryChart);
+  window._inventoryChart = new Chart(document.getElementById('inventoryChart'), {
     type: 'bar',
     data: {
       labels: ['预测组合', '总需求量', '需补货'],
