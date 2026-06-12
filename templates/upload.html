@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据上传 - 工单数据分析系统</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; background: #f0f2f5; color: #333; }
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 20px; }
+.header .nav { display: flex; gap: 16px; align-items: center; }
+.header .nav a { color: rgba(255,255,255,0.8); text-decoration: none; padding: 8px 16px; border-radius: 6px; transition: all 0.2s; }
+.header .nav a:hover, .header .nav a.active { background: rgba(255,255,255,0.15); color: white; }
+.content { padding: 24px; max-width: 900px; margin: 0 auto; }
+.upload-card { background: white; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
+.upload-card h2 { margin-bottom: 16px; font-size: 18px; }
+.upload-zone { border: 2px dashed #d0d0d0; border-radius: 12px; padding: 48px; text-align: center; cursor: pointer; transition: all 0.2s; }
+.upload-zone:hover { border-color: #0f3460; background: #f8f9ff; }
+.upload-zone.dragover { border-color: #3498db; background: #ebf5fb; }
+.upload-zone .icon { font-size: 48px; margin-bottom: 12px; }
+.upload-zone p { color: #888; margin-bottom: 8px; }
+.upload-zone .hint { font-size: 12px; color: #aaa; }
+.form-row { display: flex; gap: 16px; margin-bottom: 20px; align-items: end; }
+.form-group { flex: 1; }
+.form-group label { display: block; margin-bottom: 6px; color: #555; font-size: 14px; font-weight: 500; }
+.form-group select, .form-group input { width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px; }
+.form-group select:focus, .form-group input:focus { outline: none; border-color: #0f3460; }
+.btn { padding: 12px 24px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: #0f3460; color: white; }
+.btn-primary:hover { background: #1a4a7a; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.file-info { margin-top: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; display: none; }
+.file-info.show { display: block; }
+.file-info .name { font-weight: 500; }
+.file-info .size { color: #888; font-size: 13px; }
+.progress-section { margin-top: 20px; display: none; }
+.progress-section.show { display: block; }
+.progress-bar { width: 100%; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin: 12px 0; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); border-radius: 4px; transition: width 0.3s; }
+.progress-text { font-size: 13px; color: #666; }
+.task-result { margin-top: 16px; padding: 16px; border-radius: 8px; display: none; }
+.task-result.show { display: block; }
+.task-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.task-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.history-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+.history-table th, .history-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.history-table th { background: #f8f9fa; font-weight: 600; }
+.badge { display: inline-block; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-success { background: #d4edda; color: #155724; }
+.badge-warning { background: #fef3cd; color: #856404; }
+.badge-danger { background: #f8d7da; color: #721c24; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>工单数据分析系统</h1>
+  <div class="nav">
+    <a href="/dashboard">仪表盘</a>
+    <a href="/upload" class="active">数据上传</a>
+    <a href="/static/dashboard.html" target="_blank">详细分析</a>
+  </div>
+  <div style="color:rgba(255,255,255,0.7);font-size:13px">
+    {{ user.username }}
+    <a href="/login" style="color:rgba(255,255,255,0.6);margin-left:12px;text-decoration:none" onclick="document.cookie='access_token=;path=/;max-age=0'">退出</a>
+  </div>
+</div>
+
+<div class="content">
+  <div class="upload-card">
+    <h2>上传数据文件</h2>
+    <p style="color:#888;margin-bottom:20px">上传 CSV 文件，系统将自动合并数据并运行分析</p>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>数据类型</label>
+        <select id="dataType">
+          <option value="ticket_main">工单主表 (ticket_main)</option>
+          <option value="ticket_materials">工单物料 (ticket_materials)</option>
+          <option value="inventory_daily">库存日表 (inventory_daily)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="upload-zone" id="dropZone">
+      <div class="icon">📁</div>
+      <p>拖拽文件到这里，或点击选择文件</p>
+      <p class="hint">仅支持 CSV 格式，最大 50MB</p>
+      <input type="file" id="fileInput" accept=".csv" style="display:none">
+    </div>
+
+    <div class="file-info" id="fileInfo">
+      <span class="name" id="fileName"></span>
+      <span class="size" id="fileSize"></span>
+    </div>
+
+    <div style="margin-top:20px;text-align:right">
+      <button class="btn btn-primary" id="uploadBtn" disabled onclick="startUpload()">开始上传并分析</button>
+    </div>
+
+    <div class="progress-section" id="progressSection">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="progress-text" id="progressText">准备中...</div>
+    </div>
+
+    <div class="task-result" id="taskResult"></div>
+  </div>
+
+  <!-- 上传历史 -->
+  <div class="upload-card">
+    <h2>分析任务历史</h2>
+    <table class="history-table">
+      <thead><tr><th>时间</th><th>文件</th><th>数据类型</th><th>行数</th><th>状态</th><th>进度</th></tr></thead>
+      <tbody id="historyBody"><tr><td colspan="6" style="text-align:center;color:#999">暂无记录</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const TOKEN = '{{ token }}';
+let selectedFile = null;
+let currentTaskId = null;
+
+// 拖拽上传
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file || !file.name.endsWith('.csv')) {
+    alert('请选择 CSV 文件');
+    return;
+  }
+  selectedFile = file;
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = `(${(file.size/1024).toFixed(1)} KB)`;
+  document.getElementById('fileInfo').classList.add('show');
+  document.getElementById('uploadBtn').disabled = false;
+}
+
+async function startUpload() {
+  if (!selectedFile) return;
+
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.textContent = '上传中...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('ticket_type', document.getElementById('dataType').value);
+  formData.append('token', TOKEN);
+
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      showResult(data.detail || '上传失败', false);
+      btn.disabled = false;
+      btn.textContent = '开始上传并分析';
+      return;
+    }
+
+    currentTaskId = data.task_id;
+    document.getElementById('progressSection').classList.add('show');
+    document.getElementById('progressText').textContent = data.message;
+    btn.textContent = '分析中...';
+
+    // 轮询任务状态
+    pollTaskStatus();
+  } catch (e) {
+    showResult('网络错误: ' + e.message, false);
+    btn.disabled = false;
+    btn.textContent = '开始上传并分析';
+  }
+}
+
+async function pollTaskStatus() {
+  if (!currentTaskId) return;
+
+  try {
+    const resp = await fetch(`/api/tasks/${currentTaskId}?token=${TOKEN}`);
+    const task = await resp.json();
+
+    document.getElementById('progressFill').style.width = task.progress + '%';
+    document.getElementById('progressText').textContent = task.message;
+
+    if (task.status === 'completed') {
+      showResult(`分析完成! 共处理 ${task.rows} 行数据。`, true);
+      document.getElementById('uploadBtn').textContent = '开始上传并分析';
+      loadHistory();
+    } else if (task.status === 'failed') {
+      showResult(task.message, false);
+      document.getElementById('uploadBtn').disabled = false;
+      document.getElementById('uploadBtn').textContent = '开始上传并分析';
+    } else {
+      setTimeout(pollTaskStatus, 2000);
+    }
+  } catch (e) {
+    setTimeout(pollTaskStatus, 3000);
+  }
+}
+
+function showResult(msg, success) {
+  const el = document.getElementById('taskResult');
+  el.className = `task-result show ${success ? 'task-success' : 'task-error'}`;
+  el.textContent = msg;
+}
+
+async function loadHistory() {
+  try {
+    const resp = await fetch(`/api/tasks?token=${TOKEN}`);
+    const data = await resp.json();
+    const tasks = (data.tasks || []).reverse();
+    const tbody = document.getElementById('historyBody');
+    if (tasks.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999">暂无记录</td></tr>';
+      return;
+    }
+    tbody.innerHTML = tasks.map(t => `
+      <tr>
+        <td>${t.created_at ? new Date(t.created_at).toLocaleString() : '-'}</td>
+        <td>${t.file || '-'}</td>
+        <td>${t.ticket_type || '-'}</td>
+        <td>${t.rows || '-'}</td>
+        <td><span class="badge badge-${t.status==='completed'?'success':t.status==='running'?'warning':'danger'}">${t.status==='completed'?'完成':t.status==='running'?'分析中':'失败'}</span></td>
+        <td>${t.progress||0}%</td>
+      </tr>
+    `).join('');
+  } catch (e) {}
+}
+
+loadHistory();
+</script>
+</body>
+</html>

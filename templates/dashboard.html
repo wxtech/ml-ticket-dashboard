@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>仪表盘 - 工单数据分析系统</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; background: #f0f2f5; color: #333; }
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 20px; }
+.header .nav { display: flex; gap: 16px; align-items: center; }
+.header .nav a { color: rgba(255,255,255,0.8); text-decoration: none; padding: 8px 16px; border-radius: 6px; transition: all 0.2s; }
+.header .nav a:hover, .header .nav a.active { background: rgba(255,255,255,0.15); color: white; }
+.header .user-info { color: rgba(255,255,255,0.7); font-size: 13px; }
+.content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.card-label { font-size: 13px; color: #888; margin-bottom: 8px; }
+.card-value { font-size: 28px; font-weight: 700; }
+.card-sub { font-size: 12px; color: #999; margin-top: 4px; }
+.card-danger .card-value { color: #e74c3c; }
+.card-warning .card-value { color: #f39c12; }
+.card-success .card-value { color: #2ecc71; }
+.card-info .card-value { color: #3498db; }
+.section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
+.section h2 { font-size: 16px; margin-bottom: 16px; color: #333; }
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.chart-box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.chart-box h3 { font-size: 14px; color: #333; margin-bottom: 12px; }
+.status-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; font-size: 13px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; }
+.status-dot.running { background: #f39c12; animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.btn-primary { background: #0f3460; color: white; }
+.btn-primary:hover { background: #1a4a7a; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.task-list { max-height: 300px; overflow-y: auto; }
+.task-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+.task-item:last-child { border-bottom: none; }
+.task-status { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.task-running { background: #fef3cd; color: #856404; }
+.task-completed { background: #d4edda; color: #155724; }
+.task-failed { background: #f8d7da; color: #721c24; }
+.progress-bar { width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: #3498db; border-radius: 2px; transition: width 0.3s; }
+.empty-state { text-align: center; padding: 40px; color: #999; }
+@media (max-width: 768px) { .chart-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>工单数据分析系统</h1>
+  <div class="nav">
+    <a href="/dashboard" class="active">仪表盘</a>
+    <a href="/upload">数据上传</a>
+    <a href="/static/dashboard.html" target="_blank">详细分析</a>
+  </div>
+  <div class="user-info">
+    <span>{{ user.username }} ({{ user.role }})</span>
+    <a href="/login" style="color:rgba(255,255,255,0.6);margin-left:12px;text-decoration:none" onclick="document.cookie='access_token=;path=/;max-age=0'">退出</a>
+  </div>
+</div>
+
+<div class="content">
+  <div class="status-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">数据加载中...</span>
+    <span style="margin-left:auto;color:#999" id="lastUpdate"></span>
+    <button class="btn btn-sm btn-primary" onclick="refreshData()">刷新</button>
+  </div>
+
+  <!-- 概览卡片 -->
+  <div class="cards" id="overviewCards"></div>
+
+  <!-- 图表 -->
+  <div class="chart-row">
+    <div class="chart-box"><h3>异常分数分布</h3><canvas id="anomalyChart"></canvas></div>
+    <div class="chart-box"><h3>风险等级分布</h3><canvas id="riskChart"></canvas></div>
+  </div>
+  <div class="chart-row">
+    <div class="chart-box"><h3>库存预测概览</h3><canvas id="inventoryChart"></canvas></div>
+    <div class="chart-box"><h3>最近分析任务</h3><div class="task-list" id="taskList"><div class="empty-state">暂无任务</div></div></div>
+  </div>
+</div>
+
+<script>
+const TOKEN = '{{ token }}';
+
+async function api(url, options = {}) {
+  const resp = await fetch(url, {
+    ...options,
+    headers: { 'Authorization': `Bearer ${TOKEN}`, ...options.headers }
+  });
+  return resp.json();
+}
+
+async function refreshData() {
+  try {
+    const data = await api('/api/results/latest');
+    renderOverview(data);
+    renderCharts(data);
+    document.getElementById('lastUpdate').textContent = '更新: ' + (data.last_updated || '无数据');
+    document.getElementById('statusDot').className = 'status-dot';
+    document.getElementById('statusText').textContent = '数据正常';
+  } catch (e) {
+    document.getElementById('statusDot').className = 'status-dot running';
+    document.getElementById('statusText').textContent = '加载失败: ' + e.message;
+  }
+}
+
+function renderOverview(data) {
+  const a = data.anomaly || {};
+  const r = data.risk || {};
+  const f = data.forecast || {};
+  const p = data.plan || {};
+
+  document.getElementById('overviewCards').innerHTML = `
+    <div class="card card-info"><div class="card-label">工单总数</div><div class="card-value">${(a.total||0).toLocaleString()}</div><div class="card-sub">分析样本量</div></div>
+    <div class="card card-danger"><div class="card-label">异常工单</div><div class="card-value">${a.anomaly_count||0}</div><div class="card-sub">异常率 ${a.anomaly_rate||0}%</div></div>
+    <div class="card card-warning"><div class="card-label">中风险</div><div class="card-value">${r.medium||0}</div><div class="card-sub">平均风险分 ${r.avg_score||0}</div></div>
+    <div class="card card-danger"><div class="card-label">高风险</div><div class="card-value">${r.high||0}</div><div class="card-sub">需重点关注</div></div>
+    <div class="card card-info"><div class="card-label">库存预测</div><div class="card-value">${f.combos||0}</div><div class="card-sub">物料-站点组合</div></div>
+    <div class="card ${p.need_reorder>0?'card-danger':'card-success'}"><div class="card-label">需补货</div><div class="card-value">${p.need_reorder||0}</div><div class="card-sub">共${p.total||0}个组合</div></div>
+  `;
+}
+
+function renderCharts(data) {
+  const a = data.anomaly || {};
+  const r = data.risk || {};
+
+  // 异常分数分布 (简化饼图)
+  if (window.anomalyChart) window.anomalyChart.destroy();
+  window.anomalyChart = new Chart(document.getElementById('anomalyChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['正常', '异常'],
+      datasets: [{ data: [(a.total||0)-(a.anomaly_count||0), a.anomaly_count||0], backgroundColor: ['#2ecc71', '#e74c3c'] }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+  });
+
+  // 风险等级分布
+  if (window.riskChart) window.riskChart.destroy();
+  window.riskChart = new Chart(document.getElementById('riskChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['高风险', '中风险', '低风险'],
+      datasets: [{ data: [r.high||0, r.medium||0, r.low||0], backgroundColor: ['#e74c3c', '#f39c12', '#2ecc71'] }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+  });
+
+  // 库存概览
+  if (window.inventoryChart) window.inventoryChart.destroy();
+  const f = data.forecast || {};
+  const p = data.plan || {};
+  window.inventoryChart = new Chart(document.getElementById('inventoryChart'), {
+    type: 'bar',
+    data: {
+      labels: ['预测组合', '总需求量', '需补货'],
+      datasets: [{ data: [f.combos||0, f.total_demand||0, p.need_reorder||0], backgroundColor: ['#3498db', '#2ecc71', '#e74c3c'] }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+async function loadTasks() {
+  try {
+    const data = await api('/api/tasks');
+    const tasks = data.tasks || [];
+    const el = document.getElementById('taskList');
+    if (tasks.length === 0) {
+      el.innerHTML = '<div class="empty-state">暂无任务</div>';
+      return;
+    }
+    el.innerHTML = tasks.reverse().map(t => `
+      <div class="task-item">
+        <div>
+          <div style="font-weight:500">${t.file||'未知文件'}</div>
+          <div style="font-size:12px;color:#888">${t.message||''} | ${t.rows||0}行</div>
+          ${t.status==='running' ? `<div class="progress-bar"><div class="progress-fill" style="width:${t.progress||0}%"></div></div>` : ''}
+        </div>
+        <span class="task-status task-${t.status}">${t.status==='running'?'分析中':t.status==='completed'?'完成':'失败'}</span>
+      </div>
+    `).join('');
+  } catch (e) {}
+}
+
+// 初始化
+refreshData();
+loadTasks();
+// 每30秒自动刷新
+setInterval(() => { refreshData(); loadTasks(); }, 30000);
+</script>
+</body>
+</html>
