@@ -7,47 +7,122 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; background: #f0f2f5; color: #333; }
-.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
-.header h1 { font-size: 20px; }
-.header .nav { display: flex; gap: 16px; align-items: center; }
-.header .nav a { color: rgba(255,255,255,0.8); text-decoration: none; padding: 8px 16px; border-radius: 6px; transition: all 0.2s; }
-.header .nav a:hover, .header .nav a.active { background: rgba(255,255,255,0.15); color: white; }
-.header .user-info { color: rgba(255,255,255,0.7); font-size: 13px; }
-.content { padding: 24px; max-width: 1400px; margin: 0 auto; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.card-label { font-size: 13px; color: #888; margin-bottom: 8px; }
-.card-value { font-size: 28px; font-weight: 700; }
-.card-sub { font-size: 12px; color: #999; margin-top: 4px; }
-.card-danger .card-value { color: #e74c3c; }
-.card-warning .card-value { color: #f39c12; }
-.card-success .card-value { color: #2ecc71; }
-.card-info .card-value { color: #3498db; }
-.section { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
-.section h2 { font-size: 16px; margin-bottom: 16px; color: #333; }
-.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
-.chart-box { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.chart-box h3 { font-size: 14px; color: #333; margin-bottom: 12px; }
-.status-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding: 12px 16px; background: #f8f9fa; border-radius: 8px; font-size: 13px; }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; }
-.status-dot.running { background: #f39c12; animation: pulse 1s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-.btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; }
+
+/* Header */
+.header { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); color: white; padding: 0 32px; height: 60px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.header h1 { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.header h1::before { content: ''; width: 32px; height: 32px; background: rgba(255,255,255,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.header .nav { display: flex; gap: 4px; }
+.header .nav a { color: rgba(255,255,255,0.7); text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 14px; transition: all 0.2s; }
+.header .nav a:hover { background: rgba(255,255,255,0.1); color: white; }
+.header .nav a.active { background: rgba(255,255,255,0.15); color: white; font-weight: 500; }
+.header .right { display: flex; align-items: center; gap: 16px; }
+.header .user { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: rgba(255,255,255,0.1); border-radius: 20px; font-size: 13px; }
+.header .user .avatar { width: 28px; height: 28px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+.header .logout { color: rgba(255,255,255,0.6); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 6px; transition: all 0.2s; }
+.header .logout:hover { background: rgba(255,255,255,0.1); color: white; }
+
+/* Main Content */
+.main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+/* Status Bar */
+.status-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 14px 20px; background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.status-indicator { display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 8px rgba(46,204,113,0.4); }
+.status-dot.loading { background: #f39c12; animation: pulse 1.5s infinite; }
+.status-dot.error { background: #e74c3c; }
+@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.9); } }
+.status-text { font-size: 13px; color: #666; }
+.status-time { margin-left: auto; font-size: 12px; color: #999; display: flex; align-items: center; gap: 6px; }
+.status-time .countdown { background: #f0f0f0; padding: 2px 8px; border-radius: 10px; font-variant-numeric: tabular-nums; }
+.btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
 .btn-primary { background: #0f3460; color: white; }
-.btn-primary:hover { background: #1a4a7a; }
+.btn-primary:hover { background: #1a4a7a; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(15,52,96,0.3); }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
-.task-list { max-height: 300px; overflow-y: auto; }
-.task-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0; }
+.btn-outline { background: transparent; border: 1px solid #ddd; color: #666; }
+.btn-outline:hover { border-color: #0f3460; color: #0f3460; }
+
+/* Cards Grid */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+.card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.3s; cursor: default; position: relative; overflow: hidden; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.card.card-blue::before { background: linear-gradient(90deg, #3498db, #2980b9); }
+.card.card-red::before { background: linear-gradient(90deg, #e74c3c, #c0392b); }
+.card.card-orange::before { background: linear-gradient(90deg, #f39c12, #e67e22); }
+.card.card-green::before { background: linear-gradient(90deg, #2ecc71, #27ae60); }
+.card.card-purple::before { background: linear-gradient(90deg, #9b59b6, #8e44ad); }
+.card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 12px; }
+.card.card-blue .card-icon { background: #ebf5fb; color: #3498db; }
+.card.card-red .card-icon { background: #fdedec; color: #e74c3c; }
+.card.card-orange .card-icon { background: #fef9e7; color: #f39c12; }
+.card.card-green .card-icon { background: #eafaf1; color: #2ecc71; }
+.card.card-purple .card-icon { background: #f4ecf7; color: #9b59b6; }
+.card-label { font-size: 12px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+.card-value { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.card-sub { font-size: 12px; color: #999; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+.card-trend { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: 500; }
+.trend-up { background: #fdedec; color: #e74c3c; }
+.trend-down { background: #eafaf1; color: #2ecc71; }
+.trend-flat { background: #f0f0f0; color: #888; }
+
+/* Charts Section */
+.section-title { font-size: 16px; font-weight: 600; color: #333; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.section-title::before { content: ''; width: 4px; height: 18px; background: #0f3460; border-radius: 2px; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.chart-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.chart-card h3 { font-size: 14px; font-weight: 600; color: #333; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+.chart-card h3 .badge { font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 500; }
+.chart-card canvas { max-height: 200px; }
+
+/* Bottom Row */
+.bottom-row { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+
+/* Task List */
+.task-card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.task-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+.task-header h3 { font-size: 14px; font-weight: 600; }
+.task-list { max-height: 320px; overflow-y: auto; }
+.task-item { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid #f8f8f8; transition: background 0.2s; }
+.task-item:hover { background: #fafafa; }
 .task-item:last-child { border-bottom: none; }
-.task-status { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
-.task-running { background: #fef3cd; color: #856404; }
-.task-completed { background: #d4edda; color: #155724; }
-.task-failed { background: #f8d7da; color: #721c24; }
-.progress-bar { width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; margin-top: 8px; overflow: hidden; }
-.progress-fill { height: 100%; background: #3498db; border-radius: 2px; transition: width 0.3s; }
-.empty-state { text-align: center; padding: 40px; color: #999; }
-@media (max-width: 768px) { .chart-row { grid-template-columns: 1fr; } }
+.task-info { flex: 1; }
+.task-name { font-weight: 500; font-size: 14px; margin-bottom: 4px; }
+.task-meta { font-size: 12px; color: #888; display: flex; gap: 12px; }
+.task-badge { padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.badge-running { background: #fef3cd; color: #856404; }
+.badge-completed { background: #d4edda; color: #155724; }
+.badge-failed { background: #f8d7da; color: #721c24; }
+.progress-bar { width: 100%; height: 4px; background: #e9ecef; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #3498db, #2ecc71); border-radius: 2px; transition: width 0.5s ease; }
+
+/* Quick Actions */
+.quick-actions { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.quick-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; }
+.quick-header h3 { font-size: 14px; font-weight: 600; }
+.quick-list { padding: 12px; }
+.quick-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; text-decoration: none; color: inherit; }
+.quick-item:hover { background: #f8f9fa; }
+.quick-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.quick-icon.blue { background: #ebf5fb; }
+.quick-icon.green { background: #eafaf1; }
+.quick-icon.orange { background: #fef9e7; }
+.quick-text h4 { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.quick-text p { font-size: 11px; color: #888; }
+
+/* Empty State */
+.empty { text-align: center; padding: 40px 20px; color: #999; }
+.empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+
+/* Responsive */
+@media (max-width: 1200px) { .cards { grid-template-columns: repeat(3, 1fr); } .charts-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 768px) { .cards { grid-template-columns: repeat(2, 1fr); } .charts-grid { grid-template-columns: 1fr; } .bottom-row { grid-template-columns: 1fr; } .header { padding: 0 16px; } .main { padding: 16px; } }
+@media (max-width: 480px) { .cards { grid-template-columns: 1fr; } }
+
+/* Loading Skeleton */
+.skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 </style>
 </head>
 <body>
@@ -58,152 +133,255 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC
     <a href="/upload">数据上传</a>
     <a href="/analysis" target="_blank">详细分析</a>
   </div>
-  <div class="user-info">
-    <span>{{ user.username }} ({{ user.role }})</span>
-    <a href="/login" style="color:rgba(255,255,255,0.6);margin-left:12px;text-decoration:none" onclick="document.cookie='access_token=;path=/;max-age=0'">退出</a>
+  <div class="right">
+    <div class="user">
+      <div class="avatar">{{ user.username[0]|upper }}</div>
+      <span>{{ user.username }}</span>
+    </div>
+    <a href="/login" class="logout" onclick="document.cookie='access_token=;path=/;max-age=0'">退出</a>
   </div>
 </div>
 
-<div class="content">
+<div class="main">
+  <!-- Status Bar -->
   <div class="status-bar">
-    <div class="status-dot" id="statusDot"></div>
-    <span id="statusText">数据加载中...</span>
-    <span style="margin-left:auto;color:#999" id="lastUpdate"></span>
-    <button class="btn btn-sm btn-primary" onclick="refreshData()">刷新</button>
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">加载中...</span>
+    </div>
+    <div class="status-time">
+      <span id="lastUpdate">--</span>
+      <span class="countdown" id="countdown">30s</span>
+      <button class="btn btn-sm btn-outline" onclick="refreshData()">刷新</button>
+    </div>
   </div>
 
-  <!-- 概览卡片 -->
-  <div class="cards" id="overviewCards"></div>
-
-  <!-- 图表 -->
-  <div class="chart-row">
-    <div class="chart-box"><h3>异常分数分布</h3><canvas id="anomalyChart"></canvas></div>
-    <div class="chart-box"><h3>风险等级分布</h3><canvas id="riskChart"></canvas></div>
+  <!-- Overview Cards -->
+  <div class="cards" id="overviewCards">
+    <div class="card card-blue"><div class="card-icon">📊</div><div class="card-label">工单总数</div><div class="card-value" id="cardTotal">--</div></div>
+    <div class="card card-red"><div class="card-icon">⚠️</div><div class="card-label">异常工单</div><div class="card-value" id="cardAnomaly">--</div><div class="card-sub" id="cardAnomalyRate">--</div></div>
+    <div class="card card-orange"><div class="card-icon">🔶</div><div class="card-label">中风险</div><div class="card-value" id="cardMedium">--</div><div class="card-sub" id="cardMediumScore">--</div></div>
+    <div class="card card-red"><div class="card-icon">🔴</div><div class="card-label">高风险</div><div class="card-value" id="cardHigh">--</div></div>
+    <div class="card card-purple"><div class="card-icon">📦</div><div class="card-label">库存预测</div><div class="card-value" id="cardForecast">--</div><div class="card-sub" id="cardDemand">--</div></div>
+    <div class="card card-green"><div class="card-icon">🔄</div><div class="card-label">需补货</div><div class="card-value" id="cardReorder">--</div><div class="card-sub" id="cardReorderSub">--</div></div>
   </div>
-  <div class="chart-row">
-    <div class="chart-box"><h3>库存预测概览</h3><canvas id="inventoryChart"></canvas></div>
-    <div class="chart-box"><h3>最近分析任务</h3><div class="task-list" id="taskList"><div class="empty-state">暂无任务</div></div></div>
+
+  <!-- Charts -->
+  <div class="section-title">数据概览</div>
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>异常检测 <span class="badge badge-completed" id="anomalyBadge">--</span></h3>
+      <canvas id="anomalyChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>风险分布 <span class="badge badge-running" id="riskBadge">--</span></h3>
+      <canvas id="riskChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>库存状态 <span class="badge badge-completed" id="inventoryBadge">--</span></h3>
+      <canvas id="inventoryChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Bottom Row -->
+  <div class="bottom-row">
+    <!-- Recent Tasks -->
+    <div class="task-card">
+      <div class="task-header">
+        <h3>最近分析任务</h3>
+        <button class="btn btn-sm btn-outline" onclick="loadTasks()">刷新</button>
+      </div>
+      <div class="task-list" id="taskList">
+        <div class="empty"><div class="empty-icon">📋</div>暂无任务记录</div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+      <div class="quick-header"><h3>快捷操作</h3></div>
+      <div class="quick-list">
+        <a href="/upload" class="quick-item">
+          <div class="quick-icon blue">📁</div>
+          <div class="quick-text"><h4>上传数据</h4><p>上传CSV文件进行分析</p></div>
+        </a>
+        <a href="/analysis" target="_blank" class="quick-item">
+          <div class="quick-icon green">📈</div>
+          <div class="quick-text"><h4>详细分析</h4><p>查看完整分析报告</p></div>
+        </a>
+        <a href="/api/results/latest" target="_blank" class="quick-item">
+          <div class="quick-icon orange">🔗</div>
+          <div class="quick-text"><h4>API数据</h4><p>查看原始JSON数据</p></div>
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
 const TOKEN = '{{ token }}';
+let refreshTimer = null;
+let countdownValue = 30;
 
-async function api(url, options = {}) {
-  const resp = await fetch(url, {
-    ...options,
-    headers: { 'Authorization': `Bearer ${TOKEN}`, ...options.headers }
-  });
+async function api(url) {
+  const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${TOKEN}` } });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
 }
 
+function setLoading(state) {
+  const dot = document.getElementById('statusDot');
+  const text = document.getElementById('statusText');
+  if (state === 'loading') { dot.className = 'status-dot loading'; text.textContent = '加载中...'; }
+  else if (state === 'ok') { dot.className = 'status-dot'; text.textContent = '数据正常'; }
+  else if (state === 'error') { dot.className = 'status-dot error'; text.textContent = '加载失败'; }
+}
+
+function updateCountdown() {
+  countdownValue--;
+  if (countdownValue <= 0) { refreshData(); countdownValue = 30; }
+  document.getElementById('countdown').textContent = countdownValue + 's';
+}
+
 async function refreshData() {
+  setLoading('loading');
   try {
     const data = await api('/api/results/latest');
-    renderOverview(data);
+    updateCards(data);
+    updateBadges(data);
     try { renderCharts(data); } catch(e) { console.error('Chart error:', e); }
-    document.getElementById('lastUpdate').textContent = '更新: ' + (data.last_updated || '无数据');
-    document.getElementById('statusDot').className = 'status-dot';
-    document.getElementById('statusText').textContent = '数据正常';
+    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    setLoading('ok');
+    countdownValue = 30;
   } catch (e) {
-    document.getElementById('statusDot').className = 'status-dot running';
-    document.getElementById('statusText').textContent = '加载失败: ' + e.message;
+    setLoading('error');
+    console.error('Refresh error:', e);
   }
 }
 
-function renderOverview(data) {
+function updateCards(data) {
   const a = data.anomaly || {};
   const r = data.risk || {};
   const f = data.forecast || {};
   const p = data.plan || {};
 
-  document.getElementById('overviewCards').innerHTML = `
-    <div class="card card-info"><div class="card-label">工单总数</div><div class="card-value">${(a.total||0).toLocaleString()}</div><div class="card-sub">分析样本量</div></div>
-    <div class="card card-danger"><div class="card-label">异常工单</div><div class="card-value">${a.anomaly_count||0}</div><div class="card-sub">异常率 ${a.anomaly_rate||0}%</div></div>
-    <div class="card card-warning"><div class="card-label">中风险</div><div class="card-value">${r.medium||0}</div><div class="card-sub">平均风险分 ${r.avg_score||0}</div></div>
-    <div class="card card-danger"><div class="card-label">高风险</div><div class="card-value">${r.high||0}</div><div class="card-sub">需重点关注</div></div>
-    <div class="card card-info"><div class="card-label">库存预测</div><div class="card-value">${f.combos||0}</div><div class="card-sub">物料-站点组合</div></div>
-    <div class="card ${p.need_reorder>0?'card-danger':'card-success'}"><div class="card-label">需补货</div><div class="card-value">${p.need_reorder||0}</div><div class="card-sub">共${p.total||0}个组合</div></div>
-  `;
+  document.getElementById('cardTotal').textContent = (a.total || 0).toLocaleString();
+  document.getElementById('cardAnomaly').textContent = a.anomaly_count || 0;
+  document.getElementById('cardAnomalyRate').innerHTML = `异常率 <strong>${a.anomaly_rate || 0}%</strong>`;
+  document.getElementById('cardMedium').textContent = r.medium || 0;
+  document.getElementById('cardMediumScore').innerHTML = `风险分 <strong>${r.avg_score || 0}</strong>`;
+  document.getElementById('cardHigh').textContent = r.high || 0;
+  document.getElementById('cardForecast').textContent = f.combos || 0;
+  document.getElementById('cardDemand').innerHTML = `总需求 <strong>${(f.total_demand || 0).toLocaleString()}</strong>`;
+  document.getElementById('cardReorder').textContent = p.need_reorder || 0;
+  document.getElementById('cardReorderSub').textContent = `共${p.total || 0}个组合`;
+}
+
+function updateBadges(data) {
+  const a = data.anomaly || {};
+  const r = data.risk || {};
+  const f = data.forecast || {};
+  document.getElementById('anomalyBadge').textContent = `${a.anomaly_count || 0} 异常`;
+  document.getElementById('riskBadge').textContent = `${r.high || 0} 高 / ${r.medium || 0} 中`;
+  document.getElementById('inventoryBadge').textContent = `${p.need_reorder || 0} 需补货`;
 }
 
 function renderCharts(data) {
-  if (typeof Chart === 'undefined') {
-    document.getElementById('statusText').textContent = 'Chart.js 未加载，图表不可用';
-    return;
-  }
+  if (typeof Chart === 'undefined') return;
 
   const a = data.anomaly || {};
   const r = data.risk || {};
   const f = data.forecast || {};
   const p = data.plan || {};
 
-  // 安全销毁旧图表
-  function safeDestroy(chartVar) {
-    try { if (chartVar && typeof chartVar.destroy === 'function') chartVar.destroy(); } catch(e) {}
-  }
+  function safeDestroy(v) { try { if (v && typeof v.destroy === 'function') v.destroy(); } catch(e) {} }
 
-  // 异常分数分布
-  safeDestroy(window._anomalyChart);
-  window._anomalyChart = new Chart(document.getElementById('anomalyChart'), {
+  safeDestroy(window._c1);
+  window._c1 = new Chart(document.getElementById('anomalyChart'), {
     type: 'doughnut',
     data: {
       labels: ['正常', '异常'],
-      datasets: [{ data: [(a.total||0)-(a.anomaly_count||0), a.anomaly_count||0], backgroundColor: ['#2ecc71', '#e74c3c'] }]
+      datasets: [{
+        data: [(a.total||0)-(a.anomaly_count||0), a.anomaly_count||0],
+        backgroundColor: ['#2ecc71', '#e74c3c'],
+        borderWidth: 0, hoverOffset: 8
+      }]
     },
-    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+    options: {
+      responsive: true, cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } } }
+    }
   });
 
-  // 风险等级分布
-  safeDestroy(window._riskChart);
-  window._riskChart = new Chart(document.getElementById('riskChart'), {
+  safeDestroy(window._c2);
+  window._c2 = new Chart(document.getElementById('riskChart'), {
     type: 'doughnut',
     data: {
       labels: ['高风险', '中风险', '低风险'],
-      datasets: [{ data: [r.high||0, r.medium||0, r.low||0], backgroundColor: ['#e74c3c', '#f39c12', '#2ecc71'] }]
+      datasets: [{
+        data: [r.high||0, r.medium||0, r.low||0],
+        backgroundColor: ['#e74c3c', '#f39c12', '#2ecc71'],
+        borderWidth: 0, hoverOffset: 8
+      }]
     },
-    options: { responsive: true, plugins: { legend: { position: 'right' } } }
+    options: {
+      responsive: true, cutout: '65%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10 } } }
+    }
   });
 
-  // 库存概览
-  safeDestroy(window._inventoryChart);
-  window._inventoryChart = new Chart(document.getElementById('inventoryChart'), {
+  safeDestroy(window._c3);
+  window._c3 = new Chart(document.getElementById('inventoryChart'), {
     type: 'bar',
     data: {
-      labels: ['预测组合', '总需求量', '需补货'],
-      datasets: [{ data: [f.combos||0, f.total_demand||0, p.need_reorder||0], backgroundColor: ['#3498db', '#2ecc71', '#e74c3c'] }]
+      labels: ['预测组合', '总需求量', '需补货', '安全库存'],
+      datasets: [{
+        data: [f.combos||0, (f.total_demand||0)/100, p.need_reorder||0, p.total||0],
+        backgroundColor: ['#3498db', '#2ecc71', '#e74c3c', '#f39c12'],
+        borderRadius: 6, barThickness: 32
+      }]
     },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+    options: {
+      responsive: true, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, grid: { display: false } }, y: { grid: { display: false } } }
+    }
   });
 }
 
 async function loadTasks() {
   try {
     const data = await api('/api/tasks');
-    const tasks = data.tasks || [];
+    const tasks = (data.tasks || []).reverse();
     const el = document.getElementById('taskList');
     if (tasks.length === 0) {
-      el.innerHTML = '<div class="empty-state">暂无任务</div>';
+      el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>暂无任务记录</div>';
       return;
     }
-    el.innerHTML = tasks.reverse().map(t => `
-      <div class="task-item">
-        <div>
-          <div style="font-weight:500">${t.file||'未知文件'}</div>
-          <div style="font-size:12px;color:#888">${t.message||''} | ${t.rows||0}行</div>
-          ${t.status==='running' ? `<div class="progress-bar"><div class="progress-fill" style="width:${t.progress||0}%"></div></div>` : ''}
-        </div>
-        <span class="task-status task-${t.status}">${t.status==='running'?'分析中':t.status==='completed'?'完成':'失败'}</span>
-      </div>
-    `).join('');
+    el.innerHTML = tasks.slice(0, 8).map(t => {
+      const statusClass = t.status === 'completed' ? 'badge-completed' : t.status === 'running' ? 'badge-running' : 'badge-failed';
+      const statusText = t.status === 'completed' ? '完成' : t.status === 'running' ? '分析中' : '失败';
+      const time = t.created_at ? new Date(t.created_at).toLocaleTimeString() : '--';
+      return `
+        <div class="task-item">
+          <div class="task-info">
+            <div class="task-name">${t.file || '未知文件'}</div>
+            <div class="task-meta">
+              <span>${t.rows || 0} 行</span>
+              <span>${time}</span>
+            </div>
+            ${t.status === 'running' ? `<div class="progress-bar"><div class="progress-fill" style="width:${t.progress||0}%"></div></div>` : ''}
+          </div>
+          <span class="task-badge ${statusClass}">${statusText}</span>
+        </div>`;
+    }).join('');
   } catch (e) {}
 }
 
-// 初始化
+// Init
 refreshData();
 loadTasks();
-// 每30秒自动刷新
-setInterval(() => { refreshData(); loadTasks(); }, 30000);
+setInterval(updateCountdown, 1000);
+setInterval(loadTasks, 15000);
 </script>
 </body>
 </html>
