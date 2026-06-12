@@ -66,6 +66,22 @@ class BatchTicketInput(BaseModel):
     tickets: list[TicketInput]
 
 
+class InventoryForecastInput(BaseModel):
+    material_id: str = Field(description="物料编号")
+    site_id: str = Field(description="站点编号")
+    forecast_days: int = Field(default=30, description="预测天数")
+
+
+class InventoryPlanInput(BaseModel):
+    material_id: str = Field(description="物料编号")
+    site_id: str = Field(description="站点编号")
+    current_stock: float = Field(description="当前库存")
+    avg_daily_demand: float = Field(description="日均需求")
+    std_daily_demand: float = Field(default=5.0, description="日需求标准差")
+    lead_time_days: int = Field(default=7, description="补货周期(天)")
+    service_level: float = Field(default=0.95, description="服务水平")
+
+
 class AnomalyResult(BaseModel):
     ticket_id: str
     anomaly_label: int
@@ -267,6 +283,79 @@ def _predict_risk(ticket: TicketInput, models: dict) -> dict:
     }
 
 
+def _load_inventory_data():
+    """加载库存历史数据"""
+    inv = pd.read_csv("data/raw/inventory_daily.csv", parse_dates=["date"])
+    return inv
+
+
+def _predict_inventory_forecast(req: InventoryForecastInput) -> dict:
+    """库存需求预测"""
+    from inventory_forecast import prepare_series, forecast_prophet, forecast_arima, forecast_lgbm, ensemble_forecast
+
+    inv = _load_inventory_data()
+    series = prepare_series(inv, req.material_id, req.site_id)
+
+    if len(series) < 30:
+        raise HTTPException(status_code=400, detail=f"数据不足: {req.material_id}@{req.site_id} 仅有{len(series)}天数据，需要至少30天")
+
+    forecast_days = req.forecast_days
+    prophet_f = forecast_prophet(series, forecast_days, config)
+    arima_f = forecast_arima(series, forecast_days, config)
+    lgbm_f = forecast_lgbm(series, forecast_days, config)
+
+    ensemble_f = ensemble_forecast(prophet_f, arima_f, lgbm_f)
+
+    avg_daily = float(series["daily_consumed"].mean())
+    std_daily = float(series["daily_consumed"].std())
+    current_stock = float(series["stock_on_hand"].iloc[-1])
+
+    return {
+        "material_id": req.material_id,
+        "site_id": req.site_id,
+        "history_days": len(series),
+        "current_stock": current_stock,
+        "avg_daily_demand": round(avg_daily, 2),
+        "std_daily_demand": round(std_daily, 2),
+        "forecast": [
+            {"date": str(row["date"].date()), "forecast": round(row["forecast"], 2),
+             "lower": round(row["lower"], 2), "upper": round(row["upper"], 2)}
+            for _, row in ensemble_f.iterrows()
+        ],
+        "forecast_total": round(float(ensemble_f["forecast"].sum()), 1),
+        "forecast_avg": round(float(ensemble_f["forecast"].mean()), 2),
+    }
+
+
+def _compute_inventory_plan(req: InventoryPlanInput) -> dict:
+    """计算库存计划"""
+    import math
+
+    z_scores = {0.90: 1.28, 0.95: 1.65, 0.99: 2.33}
+    z = z_scores.get(req.service_level, 1.65)
+
+    safety_stock = round(z * req.std_daily_demand * math.sqrt(req.lead_time_days), 1)
+    reorder_point = round(req.avg_daily_demand * req.lead_time_days + safety_stock, 1)
+    days_until_stockout = round(req.current_stock / max(req.avg_daily_demand, 0.1), 1)
+    need_reorder = req.current_stock < reorder_point
+    recommended_qty = round(max(0, reorder_point - req.current_stock + safety_stock), 1) if need_reorder else 0
+
+    return {
+        "material_id": req.material_id,
+        "site_id": req.site_id,
+        "current_stock": req.current_stock,
+        "avg_daily_demand": req.avg_daily_demand,
+        "std_daily_demand": req.std_daily_demand,
+        "lead_time_days": req.lead_time_days,
+        "service_level": req.service_level,
+        "safety_stock": safety_stock,
+        "reorder_point": reorder_point,
+        "days_until_stockout": days_until_stockout,
+        "need_reorder": need_reorder,
+        "recommended_reorder_qty": recommended_qty,
+    }
+
+
 # ===== API 端点 =====
 
 @app.on_event("startup")
@@ -317,6 +406,38 @@ def batch_analyze(batch: BatchTicketInput):
         risk = _predict_risk(ticket, models)
         results.append({"anomaly": anomaly, "risk": risk})
     return {"count": len(results), "results": results}
+
+
+@app.post("/api/inventory/forecast")
+def inventory_forecast(req: InventoryForecastInput):
+    """库存需求预测：预测指定物料-站点的未来需求"""
+    return _predict_inventory_forecast(req)
+
+
+@app.post("/api/inventory/plan")
+def inventory_plan(req: InventoryPlanInput):
+    """库存计划：计算安全库存、再订货点、是否需补货"""
+    return _compute_inventory_plan(req)
+
+
+@app.post("/api/inventory/batch-plan")
+def inventory_batch_plan(reqs: list[InventoryPlanInput]):
+    """批量库存计划：一次计算多个物料-站点的库存计划"""
+    return {"count": len(reqs), "results": [_compute_inventory_plan(r) for r in reqs]}
+
+
+@app.get("/api/inventory/materials")
+def list_materials():
+    """列出所有可用的物料-站点组合"""
+    inv = _load_inventory_data()
+    combos = inv.groupby(["material_id", "site_id"]).agg(
+        days=("date", "count"),
+        avg_stock=("stock_on_hand", "mean"),
+        avg_consumed=("daily_consumed", "mean"),
+    ).reset_index()
+    combos["avg_stock"] = combos["avg_stock"].round(0).astype(int)
+    combos["avg_consumed"] = combos["avg_consumed"].round(1)
+    return {"count": len(combos), "materials": combos.to_dict("records")}
 
 
 if __name__ == "__main__":
