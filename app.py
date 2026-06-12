@@ -242,7 +242,14 @@ def _run_analysis_task(task_id: str, data_path: Path, ticket_type: str):
         main_path = Path(config["data"]["raw_dir"]) / f"{ticket_type}.csv"
         if main_path.exists():
             existing = pd.read_csv(main_path)
-            df = pd.concat([existing, df], ignore_index=True).drop_duplicates(subset=["ticket_id"], keep="last")
+            # 根据表类型选择去重键
+            if ticket_type == "inventory_daily":
+                dedup_keys = ["date", "material_id", "site_id"]
+            elif ticket_type == "ticket_materials":
+                dedup_keys = ["ticket_id", "material_id"]
+            else:
+                dedup_keys = ["ticket_id"]
+            df = pd.concat([existing, df], ignore_index=True).drop_duplicates(subset=dedup_keys, keep="last")
 
         df.to_csv(main_path, index=False)
         tasks[task_id]["progress"] = 20
